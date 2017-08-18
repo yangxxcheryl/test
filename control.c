@@ -46,6 +46,7 @@ void InitControlLayerData(void){
 
 unsigned int time;
 unsigned int uart1ReceiveOutTime;
+//test for github
 
 
 unsigned char GetRingPieceState(unsigned char n){
@@ -351,6 +352,9 @@ void UpLoadingAllSensorState(void){
 		}
 	uart_Printf("\r\n");	// 发送结束
 }
+
+
+//GIT TEST
 
 // 从机事件处理和分配
 void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
