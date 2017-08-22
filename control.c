@@ -6,17 +6,17 @@
 
 
 extern  unsigned char _SampSW;         
-unsigned char _LEDSTATE = 0;   //0±íÊ¾²âÊÔ¹ı³ÌÊÇºìµÆ£¬1±íÊ¾²âÊÔ¹ı³ÌÊÇÂÌµÆ
+unsigned char _LEDSTATE = 0;   //0è¡¨ç¤ºæµ‹è¯•è¿‡ç¨‹æ˜¯çº¢ç¯ï¼Œ1è¡¨ç¤ºæµ‹è¯•è¿‡ç¨‹æ˜¯ç»¿ç¯
 
 
 typedef struct _MOTOR_POSITION{
-	unsigned char defPosNum;	// Ô¤¶¨ÒåÎ»ÖÃ
-	int stepPos;		// ²½½øÊıÎ»ÖÃ
+	unsigned char defPosNum;	// é¢„å®šä¹‰ä½ç½®
+	int stepPos;		// æ­¥è¿›æ•°ä½ç½®
 }MOTOR_POSITION;
 
 
 extern unsigned char ControlModel;
-extern unsigned char WorkProcessStep;		// ¹¤×÷½ø³ÌºÅ
+extern unsigned char WorkProcessStep;		// å·¥ä½œè¿›ç¨‹å·
 
 
 unsigned char (*EvenPosChangeProcess)(INFO_EVENT * pInfoEvent);
@@ -24,15 +24,15 @@ unsigned char (*EvenLiquidProcess)(INFO_EVENT * pInfoEvent);
 unsigned char (*EvenCardStoreProcess)(INFO_EVENT * pInfoEvent);
 
 MOTOR_POSITION MotorPosition[SLAVE_NUM];
-unsigned char MotModulePhoSta[SLAVE_NUM][2];	// µç»úÄ£¿é¹âÅº×´Ì¬ĞÅÏ¢
-unsigned char LiquidState[4][2];	// ÒºÂ·×´Ì¬ºÍ²ÎÊı
-unsigned char StoreHumi;			// Æ¬²ÖÊª¶È
-unsigned char StoreTemp;			// Æ¬²ÖÎÂ¶È
+unsigned char MotModulePhoSta[SLAVE_NUM][2];	// ç”µæœºæ¨¡å—å…‰è—•çŠ¶æ€ä¿¡æ¯
+unsigned char LiquidState[4][2];	// æ¶²è·¯çŠ¶æ€å’Œå‚æ•°
+unsigned char StoreHumi;			// ç‰‡ä»“æ¹¿åº¦
+unsigned char StoreTemp;			// ç‰‡ä»“æ¸©åº¦
 
-unsigned char _RingPieceState[RING_QUEUE_NUM];	// ×ªÅÌ¸ÉÆ¬×´Ì¬, 0:¿Õ, 1:´æÔÚ, 255:ÎŞĞ§
+unsigned char _RingPieceState[RING_QUEUE_NUM];	// è½¬ç›˜å¹²ç‰‡çŠ¶æ€, 0:ç©º, 1:å­˜åœ¨, 255:æ— æ•ˆ
 
 
-// Êı¾İ³õÊ¼»¯
+// æ•°æ®åˆå§‹åŒ–
 void InitControlLayerData(void){
 	unsigned char i;
 	for(i=0; i<SLAVE_NUM; i++){
@@ -46,6 +46,7 @@ void InitControlLayerData(void){
 
 unsigned int time;
 unsigned int uart1ReceiveOutTime;
+//test for github
 
 
 unsigned char GetRingPieceState(unsigned char n){
@@ -54,7 +55,7 @@ unsigned char GetRingPieceState(unsigned char n){
 	return _RingPieceState[n];
 }
 
-// ÎÂÊª¶È
+// æ¸©æ¹¿åº¦
 unsigned char GetStoreHumi(void){
 	return StoreHumi;
 }
@@ -62,7 +63,7 @@ unsigned char GetStoreTemp(void){
 	return StoreTemp;
 }
 
-// µç»úÎ»ÖÃ
+// ç”µæœºä½ç½®
 void SetMotPosIdle(unsigned char slaveNum)
 {
 	MotorPosition[slaveNum].defPosNum = 0xf0;
@@ -75,7 +76,7 @@ int GetMotPositionOfStep(unsigned char slaveNum){
 	return MotorPosition[slaveNum].stepPos;
 }
 
-// »ñÈ¡ÒºÂ·×´Ì¬
+// è·å–æ¶²è·¯çŠ¶æ€
 unsigned char GetLiquidMonitorState(unsigned char num){
 	if(num>3)
 		num = 3;
@@ -88,21 +89,21 @@ unsigned char GetLiquidMonitorStatePam(unsigned char num){
 }
 
 
-// ×¢²áÎ»ÖÃ¸Ä±ä×Ô¶¯´¦Àíº¯Êı
+// æ³¨å†Œä½ç½®æ”¹å˜è‡ªåŠ¨å¤„ç†å‡½æ•°
 unsigned char RegisterPosChangeEvenProcess(void * proc){
 	EvenPosChangeProcess = proc;
 }
 void CleanPosChangeEvenProcess(void){
 	EvenPosChangeProcess = 0;
 }
-// ×¢²áÒºÂ·ÊÂ¼ş´¦Àíº¯Êı
+// æ³¨å†Œæ¶²è·¯äº‹ä»¶å¤„ç†å‡½æ•°
 unsigned char RegisterLiquidEvenProcess(void * proc){
 	EvenLiquidProcess = proc;
 }
 void CleanLiquidEvenProcess(void){
 	EvenLiquidProcess = 0;
 }
-// ×¢²áÆ¬²ÖÊÂ¼ş´¦Àíº¯Êı
+// æ³¨å†Œç‰‡ä»“äº‹ä»¶å¤„ç†å‡½æ•°
 unsigned char RegisterCardStoreEvenProcess(void * proc)
 {
 	EvenCardStoreProcess = proc;
@@ -112,16 +113,16 @@ void CleanPosCardStoreProcess(void)
 	EvenCardStoreProcess = 0;
 }
 
-// ÉÏ´«Ö¸¶¨´«¸ĞÆ÷×´Ì¬ĞÅÏ¢
-extern unsigned char CardSurplusState[6];	// ¿¨Æ¬Ê£Óà×´Ì¬
-extern unsigned char CardStoretate[6];		// Æ¬²Ö×´Ì¬
+// ä¸Šä¼ æŒ‡å®šä¼ æ„Ÿå™¨çŠ¶æ€ä¿¡æ¯
+extern unsigned char CardSurplusState[6];	// å¡ç‰‡å‰©ä½™çŠ¶æ€
+extern unsigned char CardStoretate[6];		// ç‰‡ä»“çŠ¶æ€
 void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
 	char s[2][2] = {"0","1"};
 	unsigned char i;
 	switch(slaveNum){
-		case 0:		// Ö÷¿ØÖÆ°åÉÏµÄĞÅºÅ
+		case 0:		// ä¸»æ§åˆ¶æ¿ä¸Šçš„ä¿¡å·
 			switch(num){
-				case 0:		// J4 È¡Æ¬¼ì²â¿ª¹ØĞÅºÅ
+				case 0:		// J4 å–ç‰‡æ£€æµ‹å¼€å…³ä¿¡å·
 					i = (PINL & 0x04);
 					if(i!=0)
 						i = 1;
@@ -129,7 +130,7 @@ void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
 					uart_Printf("%s $%2d $%2d $%c\r\n",strM4201, slaveNum, num, s[i][0]);
 					Uart0ReEnable;
 					break;
-				case 1:		// J7 ×ªÅÌ¸ÉÆ¬¼ì²â¹âÅºĞÅºÅ
+				case 1:		// J7 è½¬ç›˜å¹²ç‰‡æ£€æµ‹å…‰è—•ä¿¡å·
 					i = PINK & 0x01;
 					if(i!=0)
 						i = 1;
@@ -137,8 +138,8 @@ void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
 					uart_Printf("%s $%2d $%2d $%c\r\n",strM4201, slaveNum, num, s[i][0]);
 					Uart0ReEnable;
 					break;
-				case 2:		// J8 ·ÏÆ¬ºĞ¿ª¹ØĞÅºÅ
-					if(GetwasteCardState() == 0)// ·ÏÆ¬²Ö¹¦ÄÜ¿ªÆô
+				case 2:		// J8 åºŸç‰‡ç›’å¼€å…³ä¿¡å·
+					if(GetwasteCardState() == 0)// åºŸç‰‡ä»“åŠŸèƒ½å¼€å¯
 					{
 						i = PINK & 0x02;
 						if(i!=0)
@@ -148,12 +149,12 @@ void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
 						Uart0ReEnable;
 					}
 					break;
-				case 3:		// J10 ÒºÃæ´«¸ĞÆ÷ĞÅºÅ
+				case 3:		// J10 æ¶²é¢ä¼ æ„Ÿå™¨ä¿¡å·
 					Uart0ReUnable;
 					uart_Printf("%s $%2d $%2d $%4d\r\n",strM4201, slaveNum, num, getLiqDetADC(NeedleChannel));
 					Uart0ReEnable;
 					break;
-				case 4:		// J12 ÎüÑù¿ª¹ØĞÅºÅ
+				case 4:		// J12 å¸æ ·å¼€å…³ä¿¡å·
 					i = PINJ & 0x40;
 					if(i!=0)
 						i = 1;
@@ -175,7 +176,7 @@ void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
 			i = MotModulePhoSta[slaveNum][num];
 			if(i!=0)
 				i = 1;
-			// ·¢ËÍµç»úÄ£¿é¹âÅºĞÅºÅ
+			// å‘é€ç”µæœºæ¨¡å—å…‰è—•ä¿¡å·
 			Uart0ReUnable;
 			uart_Printf("%s $%2d $%2d $%c\r\n",strM4201, slaveNum, num, s[i][0]);
 			Uart0ReEnable;
@@ -183,7 +184,7 @@ void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
 		case LIQUID_CONTROL:
 			if(num>2)
 				num = 2;
-			// ·¢ËÍÒºÂ·×´Ì¬ĞÅºÅ
+			// å‘é€æ¶²è·¯çŠ¶æ€ä¿¡å·
 			if(LiquidState[num][0] == INFO_LIQ_FULL)
 				i = 1;
 			else
@@ -252,14 +253,14 @@ signed char GetMotorMonitorState(unsigned char slave,unsigned char num)
 	return MotModulePhoSta[slave][num];
 }
 
-// ÉÏ´«ËùÓĞ´«¸ĞÆ÷ĞÅÏ¢
+// ä¸Šä¼ æ‰€æœ‰ä¼ æ„Ÿå™¨ä¿¡æ¯
 void UpLoadingAllSensorState(void){
 	char s[2][2] = {"0","1"};
 	unsigned char i,n, f;
 	Uart0ReUnable;
-	uart_Printf("%s",strM4202);	// ·¢ËÍ¿ªÊ¼
+	uart_Printf("%s",strM4202);	// å‘é€å¼€å§‹
 	Uart0ReEnable;
-	// ·¢ËÍµç»úÄ£¿é¹âÅºĞÅÏ¢
+	// å‘é€ç”µæœºæ¨¡å—å…‰è—•ä¿¡æ¯
 	for(i=1; i<=12; i++)
 	{
 		if(i==6 || i==7)
@@ -269,13 +270,13 @@ void UpLoadingAllSensorState(void){
 			f = MotModulePhoSta[i][n];
 			if(f!=0)
 				f = 1;
-			// ·¢ËÍµç»úÄ£¿é¹âÅºĞÅºÅ
+			// å‘é€ç”µæœºæ¨¡å—å…‰è—•ä¿¡å·
 			Uart0ReUnable;
 			uart_Printf(" $%c",s[f][0]);
 			Uart0ReEnable;
 		}
 	}
-	// ·¢ËÍÒºÂ·Ä£¿éĞÅÏ¢
+	// å‘é€æ¶²è·¯æ¨¡å—ä¿¡æ¯
 	i = 13;
 	for(n=0; n<3; n++)
 	{
@@ -287,7 +288,7 @@ void UpLoadingAllSensorState(void){
 		uart_Printf(" $%c",s[f][0]);
 		Uart0ReEnable;
 	}
-	// ·¢ËÍÆ¬²ÖÄ£¿éĞÅÏ¢
+	// å‘é€ç‰‡ä»“æ¨¡å—ä¿¡æ¯
 	i = 14;
 	for(n=0; n<5; n++){
 		if(CardStoretate[n] == INFO_STORE_OPEN)
@@ -303,11 +304,11 @@ void UpLoadingAllSensorState(void){
 			Uart0ReEnable;
 		}
 	}
-	//·¢ËÍÆäËüÄ£¿éĞÅÏ¢
+	//å‘é€å…¶å®ƒæ¨¡å—ä¿¡æ¯
 	i = 0;
 	for(n=0; n<5; n++){
 		switch(n){
-			case 0:		// J4 È¡Æ¬¼ì²â¿ª¹ØĞÅºÅ
+			case 0:		// J4 å–ç‰‡æ£€æµ‹å¼€å…³ä¿¡å·
 				f = (PINL & 0x04);
 				if(f!=0)
 					f = 1;
@@ -315,7 +316,7 @@ void UpLoadingAllSensorState(void){
 				uart_Printf(" $%c",s[f][0]);
 				Uart0ReEnable;
 				break;
-			case 1:		// J7 ×ªÅÌ¸ÉÆ¬¼ì²â¹âÅºĞÅºÅ
+			case 1:		// J7 è½¬ç›˜å¹²ç‰‡æ£€æµ‹å…‰è—•ä¿¡å·
 				f = PINK & 0x01;
 				if(f!=0)
 					f = 1;
@@ -323,7 +324,7 @@ void UpLoadingAllSensorState(void){
 				uart_Printf(" $%c",s[f][0]);
 				Uart0ReEnable;
 				break;
-			case 2:		// J8 ·ÏÆ¬ºĞ¿ª¹ØĞÅºÅ
+			case 2:		// J8 åºŸç‰‡ç›’å¼€å…³ä¿¡å·
 				if(GetwasteCardState() == 0)
 				{
 					f = PINK & 0x02;
@@ -334,12 +335,12 @@ void UpLoadingAllSensorState(void){
 					Uart0ReEnable;
 				}
 				break;
-			case 3:		// J10 ÒºÃæ´«¸ĞÆ÷ĞÅºÅ
+			case 3:		// J10 æ¶²é¢ä¼ æ„Ÿå™¨ä¿¡å·
 				Uart0ReUnable;
 				uart_Printf(" $%4d",getLiqDetADC(NeedleChannel));
 				Uart0ReEnable;
 				break;
-			case 4:		// J12 ÎüÑù¿ª¹ØĞÅºÅ
+			case 4:		// J12 å¸æ ·å¼€å…³ä¿¡å·
 				f = PINJ & 0x40;
 				if(f!=0)
 					f = 1;
@@ -349,17 +350,15 @@ void UpLoadingAllSensorState(void){
 				break;
 			}
 		}
-	uart_Printf("\r\n");	// ·¢ËÍ½áÊø
+	uart_Printf("\r\n");	// å‘é€ç»“æŸ
 }
-
 
 
 //git test comment for branch "old"
 
-
-// ´Ó»úÊÂ¼ş´¦ÀíºÍ·ÖÅä
+// ä»æœºäº‹ä»¶å¤„ç†å’Œåˆ†é…
 void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
-	// ÊÂ¼ş·ÖÅä´¦Àí
+	// äº‹ä»¶åˆ†é…å¤„ç†
 	unsigned char curSlave, infoLen;
 	unsigned char * pInfo, *p;
 	int pos;
@@ -386,42 +385,42 @@ void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 					EvenPosChangeProcess = 0;
 				}
 			break;
-		case STA_MOT_PHO:	// µç»úÄ£¿é¹âÅº×´Ì¬¸Ä±äĞÅÏ¢
+		case STA_MOT_PHO:	// ç”µæœºæ¨¡å—å…‰è—•çŠ¶æ€æ”¹å˜ä¿¡æ¯
 			MotModulePhoSta[curSlave][*(pInfo)] = *(pInfo+1);
 			break;
 
-		case INFO_LIQ_EMPTY:		// ÒºÂ·¿Õ
-		case INFO_LIQ_FULL:			// ÒºÂ·Âú
+		case INFO_LIQ_EMPTY:		// æ¶²è·¯ç©º
+		case INFO_LIQ_FULL:			// æ¶²è·¯æ»¡
 			i = *pInfo;
 			if(i<4){
 				LiquidState[i][0] = even;
 				LiquidState[i][1] = 0;
 				}
 			break;
-		case INFO_LIQ_BUBBLE:		// ÓĞÆøÅİ
-		case INFO_LIQ_FLOW:			// ÓĞÒº¶Î
+		case INFO_LIQ_BUBBLE:		// æœ‰æ°”æ³¡
+		case INFO_LIQ_FLOW:			// æœ‰æ¶²æ®µ
 			i = *pInfo;
 			if(i<4){
 				LiquidState[i][0] = even;
 				LiquidState[i][1] = *(pInfo+1);
 				}
 			break;
-		case INFO_LIQ_PHO_ON:		// ÒºÂ·¼ì²â¹âñî¼ì²âµ½ÒºÌå
-		case INFO_LIQ_PHO_OFF:		// ÒºÂ·¼ì²â¹âñî¼ì²âµ½¿Õ
-		case INFO_LIQ_PHO_VAL:		// ÒºÂ·¹âñîÊä³öĞÅºÅÖµ
-		case INFO_LIQ_PHO_ADJ:		// ÒºÂ·¹âñîµ÷Õû½á¹û
+		case INFO_LIQ_PHO_ON:		// æ¶²è·¯æ£€æµ‹å…‰è€¦æ£€æµ‹åˆ°æ¶²ä½“
+		case INFO_LIQ_PHO_OFF:		// æ¶²è·¯æ£€æµ‹å…‰è€¦æ£€æµ‹åˆ°ç©º
+		case INFO_LIQ_PHO_VAL:		// æ¶²è·¯å…‰è€¦è¾“å‡ºä¿¡å·å€¼
+		case INFO_LIQ_PHO_ADJ:		// æ¶²è·¯å…‰è€¦è°ƒæ•´ç»“æœ
 			switch(WorkProcessStep){
-				case 0:		// ¿ÕÏĞ
+				case 0:		// ç©ºé—²
 					break;
-				case 1:		// »úĞµ×Ô¼ì
+				case 1:		// æœºæ¢°è‡ªæ£€
 					break;
-				case 2:		// ÒºÂ·×Ô¼ì
+				case 2:		// æ¶²è·¯è‡ªæ£€
 					DiluteStartCheck(pInfoEvent);
 					break;
-				case 3:		// Õı³£²âÊÔ
+				case 3:		// æ­£å¸¸æµ‹è¯•
 					DiluteProcess(pInfoEvent);
 					break;
-				case 4:		// µ÷ÊÔÎ¬»¤
+				case 4:		// è°ƒè¯•ç»´æŠ¤
 					break;
 				}
 			if(EvenLiquidProcess){
@@ -430,16 +429,16 @@ void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 					EvenLiquidProcess = 0;
 				}
 			break;
-		case INFO_STORE_OPEN:		// Æ¬²Ö´ò¿ª
-		case INFO_STORE_CLOSE:		// Æ¬²Ö¹Ø±Õ
-		case INFO_STORE_FULL:		// Æ¬²ÖÂú
-		case INFO_STORE_LITTLE:		// Æ¬²ÖÉÙÁ¿
-		case INFO_STORE_EMPTY:		// Æ¬²Ö¿Õ
-		case INFO_STORE_ERROR:		// Æ¬²Ö×´Ì¬´íÎó
-		case INFO_STORE_CAL:		// Æ¬²Ö¹âÂ·Ğ£×¼ĞÅÏ¢
+		case INFO_STORE_OPEN:		// ç‰‡ä»“æ‰“å¼€
+		case INFO_STORE_CLOSE:		// ç‰‡ä»“å…³é—­
+		case INFO_STORE_FULL:		// ç‰‡ä»“æ»¡
+		case INFO_STORE_LITTLE:		// ç‰‡ä»“å°‘é‡
+		case INFO_STORE_EMPTY:		// ç‰‡ä»“ç©º
+		case INFO_STORE_ERROR:		// ç‰‡ä»“çŠ¶æ€é”™è¯¯
+		case INFO_STORE_CAL:		// ç‰‡ä»“å…‰è·¯æ ¡å‡†ä¿¡æ¯
 		case INFO_STORE_PHO_VOL:
-		case INFO_STORE_STATE_ALL:	// È«²¿Æ¬²Ö×´Ì¬ĞÅÏ¢
-		case INFO_STORE_STATE_SPC:	// Ö¸¶¨Æ¬²Ö×´Ì¬ĞÅÏ¢
+		case INFO_STORE_STATE_ALL:	// å…¨éƒ¨ç‰‡ä»“çŠ¶æ€ä¿¡æ¯
+		case INFO_STORE_STATE_SPC:	// æŒ‡å®šç‰‡ä»“çŠ¶æ€ä¿¡æ¯
 			CardStoreSteteProcess(pInfoEvent);
 			if(EvenCardStoreProcess)
 			{
@@ -448,14 +447,14 @@ void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 					EvenCardStoreProcess = 0;
 			}
 			break;
-		case INFO_STORE_HUMITURE:	// Æ¬²ÖÎÂÊª¶È
+		case INFO_STORE_HUMITURE:	// ç‰‡ä»“æ¸©æ¹¿åº¦
 			StoreHumi = *pInfo;
 			StoreTemp = *(pInfo+1);
 			Uart0ReUnable;
 			uart_Printf("%s $%4d $%4d\r\n",strM0111, StoreHumi, StoreTemp);
 			Uart0ReEnable;
 			break;
-		case INFO_STORE_OPEN_ERR:	// Æ¬²Ö¿ªÆô³¬Ê±´íÎó
+		case INFO_STORE_OPEN_ERR:	// ç‰‡ä»“å¼€å¯è¶…æ—¶é”™è¯¯
 			Uart0ReUnable;
 			uart_Printf("%s $%4d\r\n",strE0910, *pInfo);
 			Uart0ReEnable;
@@ -468,13 +467,13 @@ void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 
 /*********************************************************************************************/
 
-
+//git test commet 2017/08/22
 
 /****************************************************************************************************/
-// »úĞµÔËĞĞ³õÊ¼»¯
+// æœºæ¢°è¿è¡Œåˆå§‹åŒ–
 /*
 unsigned char MachinePositionInit(void){
-	// »úĞµÎ»ÖÃ³õÊ¼»¯
+	// æœºæ¢°ä½ç½®åˆå§‹åŒ–
 	static unsigned char mainStep;		
 	static unsigned char waitMotSampTurn,waitMotSampNeedle, waitMotSampPump;
 	static unsigned char waitMotCardTrolley, waitMotCardLoad, waitMotCardUnLoad, waitMotTurnPlate;
@@ -496,7 +495,7 @@ unsigned char MachinePositionInit(void){
 	if(waitMotCardTrolley){	if(GetMotState(MOT_STORE_CARD_MOVE)!=STA_SLAVE_FREE)	return 0;	waitMotCardTrolley = 0;	}
 	
 	switch(mainStep){
-		case 0:		// ÉèÖÃÔËĞĞ²ÎÊı
+		case 0:		// è®¾ç½®è¿è¡Œå‚æ•°
 			SetMotRunPam(MOT_SAMP_NEEDLE,240,10,CURRENT_SAMP_NEEDLE);
 			SetMotRunPam(MOT_CARD_LOAD,160,20,CURRENT_CARD_LOAD);
 			SetMotRunPam(MOT_CARD_UNLOAD,160,20,CURRENT_CARD_UNLOAD);
@@ -509,34 +508,34 @@ unsigned char MachinePositionInit(void){
 			SetCardTrolleyState(0);
 			SetEValve(EV1, EV_OPEN);
 			SetMotRunPam(MOT_EFFLUENT, 180, 2, CURRENT_EFFLUENT);
-			MotRun(MOT_EFFLUENT, 2500);			// ¿ªÆô·ÏÒº±Ã
+			MotRun(MOT_EFFLUENT, 2500);			// å¼€å¯åºŸæ¶²æ³µ
 			waitMotCardUnLoad = 1;
 			mainStep = 1;
 			break;
-		case 1:		// ×ªÅÌÎ»ÖÃ³õÊ¼»¯
+		case 1:		// è½¬ç›˜ä½ç½®åˆå§‹åŒ–
 			SetMotRunPam(MOT_TURN_PLATE,240,20,CURRENT_TURN_PLATE);
 			MotInitCheck(MOT_TURN_PLATE);
 			waitMotTurnPlate = 1;
 			mainStep = 2;
 			break;
-		case 2:		// ×ªÅÌÔËĞĞµ½0Î»
+		case 2:		// è½¬ç›˜è¿è¡Œåˆ°0ä½
 			MotRunToSite(MOT_TURN_PLATE,0);
 			waitMotTurnPlate = 1;
 			waitMotSampNeedle = 1;
 			mainStep = 3;
 			break;
-		case 3:		// Æ¬²ÖĞ¡³µÔËĞĞµ½ÆğÊ¼Î»
+		case 3:		// ç‰‡ä»“å°è½¦è¿è¡Œåˆ°èµ·å§‹ä½
 			SetMotRunPam(MOT_STORE_CARD_MOVE,200,10,CURRENT_STORE_MOVE);
 			MotInitCheck(MOT_STORE_CARD_MOVE);
 			waitMotSampNeedle = 1;
 			mainStep = 100;
 			break;
-		case 100:		// È¡ÑùÕë»ØÁã¾­³£³öÏÖÔÚÔË×ªÊ±¸ø³ö¿ÕÏĞĞÅºÅ, ´Ë´¦´ÓĞÂÔËĞĞÒÔ±ÜÃâ´íÎó
+		case 100:		// å–æ ·é’ˆå›é›¶ç»å¸¸å‡ºç°åœ¨è¿è½¬æ—¶ç»™å‡ºç©ºé—²ä¿¡å·, æ­¤å¤„ä»æ–°è¿è¡Œä»¥é¿å…é”™è¯¯
 			MotRunTo(MOT_SAMP_NEEDLE, 0);
 			waitMotSampNeedle = 1;
 			mainStep = 4;
 			break;
-		case 4:		// È¡Ñù±Û»Øµ½ÆğÊ¼Î»
+		case 4:		// å–æ ·è‡‚å›åˆ°èµ·å§‹ä½
 			SetEValve(EV_ALL, EV_CLOSE);
 			SetMotRunPam(MOT_SAMP_TRUN,200,5,CURRENT_SAMP_TRUN);
 			MotInitCheck(MOT_SAMP_TRUN);
@@ -548,7 +547,7 @@ unsigned char MachinePositionInit(void){
 			mainStep = 7;
 			i = 0;
 			break;
-		case 5:	// È¡Ñù±ÛĞı×ªÊÔÔËĞĞ
+		case 5:	// å–æ ·è‡‚æ—‹è½¬è¯•è¿è¡Œ
 			MotRunTo(MOT_SAMP_TRUN,_POS_SAMPTURN_SAMP+200);
 			waitMotSampTurn = 1;
 			mainStep = 6;
@@ -566,7 +565,7 @@ unsigned char MachinePositionInit(void){
 				i = 0;	
 				}
 			break;
-		case 7:		// É¨Ãè×ªÅÌÉÏÒÅÁô¸ÉÆ¬	_RingPieceState
+		case 7:		// æ‰«æè½¬ç›˜ä¸Šé—ç•™å¹²ç‰‡	_RingPieceState
 			i++;
 			if(i>=RING_QUEUE_NUM)
 				i = 0;
@@ -586,26 +585,26 @@ unsigned char MachinePositionInit(void){
 			else
 				mainStep = 7;
 			break;
-		case 9:		// É¨Ãè×ªÅÌ
-			MotRunToSite(MOT_TURN_PLATE,10);	// 25 ÈÃ×ªÅÌµÄ0ºÅ×ªµ½Ğ¶Æ¬Î»ÖÃ
+		case 9:		// æ‰«æè½¬ç›˜
+			MotRunToSite(MOT_TURN_PLATE,10);	// 25 è®©è½¬ç›˜çš„0å·è½¬åˆ°å¸ç‰‡ä½ç½®
 			waitMotTurnPlate = 1;
 			i = 0;
 			mainStep = 10;
 			break;
-		case 10:		// °´Ë³ĞòÑ°ÕÒÊ£Óà¸ÉÆ¬
+		case 10:		// æŒ‰é¡ºåºå¯»æ‰¾å‰©ä½™å¹²ç‰‡
 			n = i + 10;
 			if(n>=RING_QUEUE_NUM)
 				n -= RING_QUEUE_NUM;
-			if(GetRingPieceState(i)==1){	// ×ªÅÌÉÏÓĞÊ£Óà¸ÉÆ¬
-				MotRunToSite(MOT_TURN_PLATE,n);	// ×ªÅÌÔËĞĞµ½µ±Ç°Î»ÖÃ
+			if(GetRingPieceState(i)==1){	// è½¬ç›˜ä¸Šæœ‰å‰©ä½™å¹²ç‰‡
+				MotRunToSite(MOT_TURN_PLATE,n);	// è½¬ç›˜è¿è¡Œåˆ°å½“å‰ä½ç½®
 				waitMotTurnPlate = 1;
 				mainStep = 11;
-				m = 0;		// ·ÏÆ¬²Ö´ò¿ª¼ÆÊ±
+				m = 0;		// åºŸç‰‡ä»“æ‰“å¼€è®¡æ—¶
 				}
 			else
-				mainStep = 14;		// ¼ÌĞø²éÕÒÏÂÒ»¸ö
+				mainStep = 14;		// ç»§ç»­æŸ¥æ‰¾ä¸‹ä¸€ä¸ª
 			break;
-		case 11:		// ¿ªÊ¼Ğ¶ÔØ×ªÅÌÉÏµÄ¸ÉÆ¬
+		case 11:		// å¼€å§‹å¸è½½è½¬ç›˜ä¸Šçš„å¹²ç‰‡
 			if((PINK & 0x02) == 0){
 				SetDelayTime(MOT_TURN_PLATE, 10);
 				m ++;
@@ -629,49 +628,49 @@ unsigned char MachinePositionInit(void){
 			SetDelayTime(MOT_SAMP_TRUN, 10);
 			mainStep = 13;
 			break;
-		case 13:	// Ğ¶Æ¬Ğ¡³µ»Øµ½ÆğÊ¼µã
+		case 13:	// å¸ç‰‡å°è½¦å›åˆ°èµ·å§‹ç‚¹
 			MotRunTo(MOT_CARD_UNLOAD,0);
 			waitMotCardUnLoad = 1;
 			mainStep = 14;
 			break;
 		case 14:
 			i++;
-			if(i < RING_QUEUE_NUM)	// Î´Íê¼ÌĞø
+			if(i < RING_QUEUE_NUM)	// æœªå®Œç»§ç»­
 				mainStep = 10;
 			else
-				mainStep = 15;	// ¼ì²é½áÊø
+				mainStep = 15;	// æ£€æŸ¥ç»“æŸ
 			break;
-		case 15:	// ¼ì²éÆ¬²ÖĞ¡³µÉÏÊÇ·ñÓĞ¸ÉÆ¬
+		case 15:	// æ£€æŸ¥ç‰‡ä»“å°è½¦ä¸Šæ˜¯å¦æœ‰å¹²ç‰‡
 			SetMotRunPam(MOT_STORE_CARD_MOVE,64,10,CURRENT_STORE_MOVE);
 			MotRunTo(MOT_STORE_CARD_MOVE,100);
 			waitMotCardTrolley = 1;
 			mainStep = 16;
 			break;
 		case 16:
-			i = PINL & 0x04;		// ¶ÁÈ¡È¡Æ¬¼ì²â´«¸ĞÆ÷¿ÕÏĞ×´Ì¬
-			MotRunTo(MOT_STORE_CARD_MOVE,0);	// È¡Æ¬Ğ¡³µÔËĞĞµ½ÁãÎ»
+			i = PINL & 0x04;		// è¯»å–å–ç‰‡æ£€æµ‹ä¼ æ„Ÿå™¨ç©ºé—²çŠ¶æ€
+			MotRunTo(MOT_STORE_CARD_MOVE,0);	// å–ç‰‡å°è½¦è¿è¡Œåˆ°é›¶ä½
 			waitMotCardTrolley = 1;
 			mainStep = 17;
 			break;
 		case 17:
-			n = PINL & 0x04;		// ¶ÁÈ¡È¡Æ¬¼ì²â´«¸ĞÆ÷×´Ì¬
-			if(i != n){		// È¡Æ¬Ğ¡³µÉÏÓĞÊ£Óà¸ÉÆ¬
-				MotRunToSite(MOT_TURN_PLATE,0);	// ×ªÅÌÔËĞĞµ½0ºÅÎ»ÖÃ
+			n = PINL & 0x04;		// è¯»å–å–ç‰‡æ£€æµ‹ä¼ æ„Ÿå™¨çŠ¶æ€
+			if(i != n){		// å–ç‰‡å°è½¦ä¸Šæœ‰å‰©ä½™å¹²ç‰‡
+				MotRunToSite(MOT_TURN_PLATE,0);	// è½¬ç›˜è¿è¡Œåˆ°0å·ä½ç½®
 				waitMotTurnPlate = 1;
 				mainStep = 18;
 				}
 			else
-				mainStep = 26;		// È¡Æ¬Ğ¡³µÉÏÃ»ÓĞ¸ÉÆ¬, Ìø¹ı
+				mainStep = 26;		// å–ç‰‡å°è½¦ä¸Šæ²¡æœ‰å¹²ç‰‡, è·³è¿‡
 			break;
-		case 18:		// ¸ÉÆ¬ÍÆÈë×ªÅÌ
+		case 18:		// å¹²ç‰‡æ¨å…¥è½¬ç›˜
 			SetMotRunPam(MOT_CARD_LOAD,160,10,CURRENT_CARD_LOAD);
-			MotRunTo(MOT_CARD_LOAD,_POS_CARDLOAD_RING);		// ×°Æ¬ĞĞ³Ì94mm/0.08128 = 1156
+			MotRunTo(MOT_CARD_LOAD,_POS_CARDLOAD_RING);		// è£…ç‰‡è¡Œç¨‹94mm/0.08128 = 1156
 			waitMotCardLoad = 1;
 			mainStep = 20;
 			break;
-		case 19:		// ¸ÉÆ¬ÍÆÈë×ªÅÌ²½Öè2
+		case 19:		// å¹²ç‰‡æ¨å…¥è½¬ç›˜æ­¥éª¤2
 		//	SetMotRunPam(MOT_CARD_LOAD,64,2,2);
-			MotRunTo(MOT_CARD_LOAD,_POS_CARDLOAD_RING);		// ×°Æ¬ĞĞ³Ì94mm/0.08128 = 1156
+			MotRunTo(MOT_CARD_LOAD,_POS_CARDLOAD_RING);		// è£…ç‰‡è¡Œç¨‹94mm/0.08128 = 1156
 			waitMotCardLoad = 1;
 			mainStep = 20;
 			break;
@@ -679,19 +678,19 @@ unsigned char MachinePositionInit(void){
 			SetDelayTime(MOT_SAMP_TRUN, 10);
 			mainStep = 21;
 			break;
-		case 21:		// ¸ÉÆ¬ÍÆÈë¸´Î»
+		case 21:		// å¹²ç‰‡æ¨å…¥å¤ä½
 			SetMotRunPam(MOT_CARD_LOAD,200,10,CURRENT_CARD_LOAD);
 			MotRunTo(MOT_CARD_LOAD,0);
 			waitMotCardLoad = 1;
 			mainStep = 22;
 			break;
-		case 22:		// ×ªÅÌ0ºÅ×ªµ½Ğ¶Æ¬Î»ÖÃ
+		case 22:		// è½¬ç›˜0å·è½¬åˆ°å¸ç‰‡ä½ç½®
 		//	SetMotRunPam(MOT_TURN_PLATE,240,10,2);
 			MotRunToSite(MOT_TURN_PLATE,25);
 			waitMotTurnPlate = 1;
 			mainStep = 23;
 			break;
-		case 23:		// ¿ªÊ¼Ğ¶Æ¬
+		case 23:		// å¼€å§‹å¸ç‰‡
 			SetMotRunPam(MOT_CARD_UNLOAD,200,20,CURRENT_CARD_UNLOAD);
 			MotRunTo(MOT_CARD_UNLOAD,_POS_UNLOAD_OUT);
 			waitMotCardUnLoad = 1;
@@ -701,13 +700,13 @@ unsigned char MachinePositionInit(void){
 			SetDelayTime(MOT_SAMP_TRUN,10);
 			mainStep = 25;
 			break;
-		case 25:		// Ğ¶Æ¬Ğ¡³µ»Øµ½ÆğÊ¼Î»
+		case 25:		// å¸ç‰‡å°è½¦å›åˆ°èµ·å§‹ä½
 			SetMotRunPam(MOT_CARD_UNLOAD,200,20,2);
 			MotRunTo(MOT_CARD_UNLOAD,_POS_UNLOAD_HOME);
 			waitMotCardUnLoad = 1;
 			mainStep = 26;
 			break;
-		case 26:		// ×ªÅÌÔË×ªµ½³õÊ¼×´Ì¬
+		case 26:		// è½¬ç›˜è¿è½¬åˆ°åˆå§‹çŠ¶æ€
 			MotRunToSite(MOT_TURN_PLATE,29);
 			waitMotTurnPlate = 1;
 			MotRunTo(MOT_STORE_CARD_MOVE,432);
@@ -725,7 +724,7 @@ unsigned char MachinePositionInit(void){
 */
 
 unsigned char MachinePositionInit(void){
-	// »úĞµÎ»ÖÃ³õÊ¼»¯
+	// æœºæ¢°ä½ç½®åˆå§‹åŒ–
 	static unsigned char mainStep;		
 	static unsigned char waitMotSampTurn,waitMotSampNeedle, waitMotSampPump;
 	static unsigned char waitMotCardTrolley, waitMotCardLoad, waitMotCardUnLoad, waitMotTurnPlate;
@@ -748,7 +747,7 @@ unsigned char MachinePositionInit(void){
 	
 	switch(mainStep)
 	{
-		case 0:		// ÉèÖÃÔËĞĞ²ÎÊı
+		case 0:		// è®¾ç½®è¿è¡Œå‚æ•°
 			SetMotRunPam(MOT_SAMP_NEEDLE,240,10,CURRENT_SAMP_NEEDLE);
 			SetMotRunPam(MOT_CARD_LOAD,160,20,CURRENT_CARD_LOAD);
 			SetMotRunPam(MOT_CARD_UNLOAD,160,20,CURRENT_CARD_UNLOAD);
@@ -761,7 +760,7 @@ unsigned char MachinePositionInit(void){
 			SetCardTrolleyState(0);
 			SetEValve(EV1, EV_OPEN);
 			SetMotRunPam(MOT_EFFLUENT, 180, 2, CURRENT_EFFLUENT);
-			MotRun(MOT_EFFLUENT, 2500);			// ¿ªÆô·ÏÒº±Ã
+			MotRun(MOT_EFFLUENT, 2500);			// å¼€å¯åºŸæ¶²æ³µ
 			waitMotCardUnLoad = 1;
 			mainStep = 1;
 			break;
@@ -771,7 +770,7 @@ unsigned char MachinePositionInit(void){
 			Uart0ReEnable;
 			mainStep = 2;
 			break;
-		case 2:		// ×ªÅÌÎ»ÖÃ³õÊ¼»¯
+		case 2:		// è½¬ç›˜ä½ç½®åˆå§‹åŒ–
 			SetMotRunPam(MOT_TURN_PLATE,240,20,CURRENT_TURN_PLATE);
 			MotInitCheck(MOT_TURN_PLATE);
 			waitMotTurnPlate = 1;
@@ -783,7 +782,7 @@ unsigned char MachinePositionInit(void){
 			Uart0ReEnable;
 			mainStep = 4;
 			break;
-		case 4:		// ×ªÅÌÔËĞĞµ½0Î»
+		case 4:		// è½¬ç›˜è¿è¡Œåˆ°0ä½
 			MotRunToSite(MOT_TURN_PLATE,0);
 			waitMotTurnPlate = 1;
 			waitMotSampNeedle = 1;
@@ -795,7 +794,7 @@ unsigned char MachinePositionInit(void){
 			Uart0ReEnable;
 			mainStep = 6;
 			break;
-		case 6:		// Æ¬²ÖĞ¡³µÔËĞĞµ½ÆğÊ¼Î»
+		case 6:		// ç‰‡ä»“å°è½¦è¿è¡Œåˆ°èµ·å§‹ä½
 			SetMotRunPam(MOT_STORE_CARD_MOVE,200,10,CURRENT_STORE_MOVE);
 			MotInitCheck(MOT_STORE_CARD_MOVE);
 			waitMotSampNeedle = 1;
@@ -807,7 +806,7 @@ unsigned char MachinePositionInit(void){
 			Uart0ReEnable;
 			mainStep = 8;
 			break;
-		case 8:		// È¡ÑùÕë»ØÁã¾­³£³öÏÖÔÚÔË×ªÊ±¸ø³ö¿ÕÏĞĞÅºÅ, ´Ë´¦´ÓĞÂÔËĞĞÒÔ±ÜÃâ´íÎó
+		case 8:		// å–æ ·é’ˆå›é›¶ç»å¸¸å‡ºç°åœ¨è¿è½¬æ—¶ç»™å‡ºç©ºé—²ä¿¡å·, æ­¤å¤„ä»æ–°è¿è¡Œä»¥é¿å…é”™è¯¯
 			MotRunTo(MOT_SAMP_NEEDLE, 0);
 			waitMotSampNeedle = 1;
 			mainStep = 9;
@@ -818,7 +817,7 @@ unsigned char MachinePositionInit(void){
 			Uart0ReEnable;
 			mainStep = 10;
 			break;
-		case 10:		// È¡Ñù±Û»Øµ½ÆğÊ¼Î»
+		case 10:		// å–æ ·è‡‚å›åˆ°èµ·å§‹ä½
 			SetEValve(EV_ALL, EV_CLOSE);
 			SetMotRunPam(MOT_SAMP_TRUN,200,5,CURRENT_SAMP_TRUN);
 			MotInitCheck(MOT_SAMP_TRUN);
@@ -836,7 +835,7 @@ unsigned char MachinePositionInit(void){
 			Uart0ReEnable;
 			mainStep = 12;
 			break;
-		case 12:		// É¨Ãè×ªÅÌÉÏÒÅÁô¸ÉÆ¬	_RingPieceState
+		case 12:		// æ‰«æè½¬ç›˜ä¸Šé—ç•™å¹²ç‰‡	_RingPieceState
 			i++;
 			if(i >= RING_QUEUE_NUM)
 				i = 0;
@@ -856,27 +855,27 @@ unsigned char MachinePositionInit(void){
 			else
 				mainStep = 12;
 			break;
-		case 14:		// É¨Ãè×ªÅÌ
-			MotRunToSite(MOT_TURN_PLATE,10);	// 25 ÈÃ×ªÅÌµÄ0ºÅ×ªµ½Ğ¶Æ¬Î»ÖÃ
+		case 14:		// æ‰«æè½¬ç›˜
+			MotRunToSite(MOT_TURN_PLATE,10);	// 25 è®©è½¬ç›˜çš„0å·è½¬åˆ°å¸ç‰‡ä½ç½®
 			waitMotTurnPlate = 1;
 			i = 0;
 			mainStep = 15;
 			break;
-		case 15:		// °´Ë³ĞòÑ°ÕÒÊ£Óà¸ÉÆ¬
+		case 15:		// æŒ‰é¡ºåºå¯»æ‰¾å‰©ä½™å¹²ç‰‡
 			n = i + 10;
 			if(n>=RING_QUEUE_NUM)
 				n -= RING_QUEUE_NUM;
-			if(GetRingPieceState(i) == 1)	// ×ªÅÌÉÏÓĞÊ£Óà¸ÉÆ¬
+			if(GetRingPieceState(i) == 1)	// è½¬ç›˜ä¸Šæœ‰å‰©ä½™å¹²ç‰‡
 			{
-				MotRunToSite(MOT_TURN_PLATE,n);	// ×ªÅÌÔËĞĞµ½µ±Ç°Î»ÖÃ
+				MotRunToSite(MOT_TURN_PLATE,n);	// è½¬ç›˜è¿è¡Œåˆ°å½“å‰ä½ç½®
 				waitMotTurnPlate = 1;
 				mainStep = 16;
-				m = 0;		// ·ÏÆ¬²Ö´ò¿ª¼ÆÊ±
+				m = 0;		// åºŸç‰‡ä»“æ‰“å¼€è®¡æ—¶
 			}
 			else
-				mainStep = 19;		// ¼ÌĞø²éÕÒÏÂÒ»¸ö
+				mainStep = 19;		// ç»§ç»­æŸ¥æ‰¾ä¸‹ä¸€ä¸ª
 			break;
-		case 16:		// ¿ªÊ¼Ğ¶ÔØ×ªÅÌÉÏµÄ¸ÉÆ¬
+		case 16:		// å¼€å§‹å¸è½½è½¬ç›˜ä¸Šçš„å¹²ç‰‡
 			if(GetwasteCardState() == 0)
 			{
 				if((PINK & 0x02) == 0)
@@ -907,40 +906,40 @@ unsigned char MachinePositionInit(void){
 			SetDelayTime(MOT_SAMP_TRUN, 10);
 			mainStep = 18;
 			break;
-		case 18:	// Ğ¶Æ¬Ğ¡³µ»Øµ½ÆğÊ¼µã
+		case 18:	// å¸ç‰‡å°è½¦å›åˆ°èµ·å§‹ç‚¹
 			MotRunTo(MOT_CARD_UNLOAD,0);
 			waitMotCardUnLoad = 1;
 			mainStep = 19;
 			break;
 		case 19:
 			i++;
-			if(i < RING_QUEUE_NUM)	// Î´Íê¼ÌĞø
+			if(i < RING_QUEUE_NUM)	// æœªå®Œç»§ç»­
 				mainStep = 15;
 			else
 			{
-				mainStep = 20;	// ¼ì²é½áÊø
+				mainStep = 20;	// æ£€æŸ¥ç»“æŸ
 				Uart0ReUnable;
 				uart_Printf("%s\r\n",strM2114);
 				Uart0ReEnable;
 			}
 			break;
-		case 20:	// ¼ì²éÆ¬²ÖĞ¡³µÉÏÊÇ·ñÓĞ¸ÉÆ¬
+		case 20:	// æ£€æŸ¥ç‰‡ä»“å°è½¦ä¸Šæ˜¯å¦æœ‰å¹²ç‰‡
 			SetMotRunPam(MOT_STORE_CARD_MOVE,64,10,CURRENT_STORE_MOVE);
 			MotRunTo(MOT_STORE_CARD_MOVE,100);
 			waitMotCardTrolley = 1;
 			mainStep = 21;
 			break;
 		case 21:
-			i = PINL & 0x04;					// ¶ÁÈ¡È¡Æ¬¼ì²â´«¸ĞÆ÷¿ÕÏĞ×´Ì¬
-			MotRunTo(MOT_STORE_CARD_MOVE,0);	// È¡Æ¬Ğ¡³µÔËĞĞµ½ÁãÎ»
+			i = PINL & 0x04;					// è¯»å–å–ç‰‡æ£€æµ‹ä¼ æ„Ÿå™¨ç©ºé—²çŠ¶æ€
+			MotRunTo(MOT_STORE_CARD_MOVE,0);	// å–ç‰‡å°è½¦è¿è¡Œåˆ°é›¶ä½
 			waitMotCardTrolley = 1;
 			mainStep = 22;
 			break;
 		case 22:
-			n = PINL & 0x04;					// ¶ÁÈ¡È¡Æ¬¼ì²â´«¸ĞÆ÷×´Ì¬
-			if(i != n)		// È¡Æ¬Ğ¡³µÉÏÓĞÊ£Óà¸ÉÆ¬
+			n = PINL & 0x04;					// è¯»å–å–ç‰‡æ£€æµ‹ä¼ æ„Ÿå™¨çŠ¶æ€
+			if(i != n)		// å–ç‰‡å°è½¦ä¸Šæœ‰å‰©ä½™å¹²ç‰‡
 			{
-				MotRunToSite(MOT_TURN_PLATE,0);	// ×ªÅÌÔËĞĞµ½0ºÅÎ»ÖÃ
+				MotRunToSite(MOT_TURN_PLATE,0);	// è½¬ç›˜è¿è¡Œåˆ°0å·ä½ç½®
 				waitMotTurnPlate = 1;
 				mainStep = 23;
 				Uart0ReUnable;
@@ -948,11 +947,11 @@ unsigned char MachinePositionInit(void){
 				Uart0ReEnable;
 			}
 			else
-				mainStep = 31;		// È¡Æ¬Ğ¡³µÉÏÃ»ÓĞ¸ÉÆ¬, Ìø¹ı
+				mainStep = 31;		// å–ç‰‡å°è½¦ä¸Šæ²¡æœ‰å¹²ç‰‡, è·³è¿‡
 			break;
-		case 23:		// ¸ÉÆ¬ÍÆÈë×ªÅÌ
+		case 23:		// å¹²ç‰‡æ¨å…¥è½¬ç›˜
 			SetMotRunPam(MOT_CARD_LOAD,160,10,CURRENT_CARD_LOAD);
-			MotRunTo(MOT_CARD_LOAD,_POS_CARDLOAD_RING);		// ×°Æ¬ĞĞ³Ì94mm/0.08128 = 1156
+			MotRunTo(MOT_CARD_LOAD,_POS_CARDLOAD_RING);		// è£…ç‰‡è¡Œç¨‹94mm/0.08128 = 1156
 			waitMotCardLoad = 1;
 			mainStep = 24;
 			break;
@@ -960,19 +959,19 @@ unsigned char MachinePositionInit(void){
 			SetDelayTime(MOT_SAMP_TRUN, 10);
 			mainStep = 25;
 			break;
-		case 25:		// ¸ÉÆ¬ÍÆÈë¸´Î»
+		case 25:		// å¹²ç‰‡æ¨å…¥å¤ä½
 			SetMotRunPam(MOT_CARD_LOAD,200,10,CURRENT_CARD_LOAD);
 			MotRunTo(MOT_CARD_LOAD,0);
 			waitMotCardLoad = 1;
 			mainStep = 26;
 			break;
-		case 26:		// ×ªÅÌ0ºÅ×ªµ½Ğ¶Æ¬Î»ÖÃ
+		case 26:		// è½¬ç›˜0å·è½¬åˆ°å¸ç‰‡ä½ç½®
 		//	SetMotRunPam(MOT_TURN_PLATE,240,10,2);
 			MotRunToSite(MOT_TURN_PLATE,25);
 			waitMotTurnPlate = 1;
 			mainStep = 27;
 			break;
-		case 27:		// ¿ªÊ¼Ğ¶Æ¬
+		case 27:		// å¼€å§‹å¸ç‰‡
 			SetMotRunPam(MOT_CARD_UNLOAD,200,20,CURRENT_CARD_UNLOAD);
 			MotRunTo(MOT_CARD_UNLOAD,_POS_UNLOAD_OUT);
 			waitMotCardUnLoad = 1;
@@ -982,7 +981,7 @@ unsigned char MachinePositionInit(void){
 			SetDelayTime(MOT_SAMP_TRUN,10);
 			mainStep = 29;
 			break;
-		case 29:		// Ğ¶Æ¬Ğ¡³µ»Øµ½ÆğÊ¼Î»
+		case 29:		// å¸ç‰‡å°è½¦å›åˆ°èµ·å§‹ä½
 			SetMotRunPam(MOT_CARD_UNLOAD,200,20,2);
 			MotRunTo(MOT_CARD_UNLOAD,_POS_UNLOAD_HOME);
 			waitMotCardUnLoad = 1;
@@ -994,7 +993,7 @@ unsigned char MachinePositionInit(void){
 			Uart0ReEnable;
 			mainStep = 31;
 			break;
-		case 31:		// ×ªÅÌÔË×ªµ½³õÊ¼×´Ì¬
+		case 31:		// è½¬ç›˜è¿è½¬åˆ°åˆå§‹çŠ¶æ€
 			MotRunToSite(MOT_TURN_PLATE,29);
 			waitMotTurnPlate = 1;
 			MotRunTo(MOT_STORE_CARD_MOVE,432);
@@ -1018,19 +1017,19 @@ unsigned char MachinePositionInit(void){
 	return 0;
 }
 
-// µÈ´ıÎüÑù°´¼ü
+// ç­‰å¾…å¸æ ·æŒ‰é”®
 unsigned char WaitStartKey(void){
-	// µÈ´ıÆô¶¯°´¼ü°´ÏÂ
+	// ç­‰å¾…å¯åŠ¨æŒ‰é”®æŒ‰ä¸‹
 	static unsigned char callCnt;
 	unsigned char key;
 	
 	key = (PINJ & 0x40);
 	if(callCnt == 0){
-		if(key == 0)	// °´¼üÔÚËÉ¿ªÊÇÆô¶¯£¬Èç¹û°´¼üÒ»Ö±°´×ÅÊÓÎªÎŞ¶¯×÷
+		if(key == 0)	// æŒ‰é”®åœ¨æ¾å¼€æ˜¯å¯åŠ¨ï¼Œå¦‚æœæŒ‰é”®ä¸€ç›´æŒ‰ç€è§†ä¸ºæ— åŠ¨ä½œ
 			callCnt = 1;
 		}
 	else {
-		if(key == 0x40){	// °´¼ü°´ÏÂ
+		if(key == 0x40){	// æŒ‰é”®æŒ‰ä¸‹
 			callCnt = 0;
 			return 1;
 			}
@@ -1038,38 +1037,38 @@ unsigned char WaitStartKey(void){
 	return 0;
 }
 
-/********************************************* ·äÃùÌáÊ¾Òô **********************************************/
+/********************************************* èœ‚é¸£æç¤ºéŸ³ **********************************************/
 static unsigned char BeepNum=0;
 static unsigned char BeepState=0;
 static unsigned int BeepCnt;
 
 void SetBeepBusy(void){
-	// 1¶Ì 1³¤
+	// 1çŸ­ 1é•¿
 	BeepState=1;
 	BeepNum = 0;
 	BeepCnt=0;
 }
 void SetBeepWarning(void){
-	// 1³¤Òô
+	// 1é•¿éŸ³
 	BeepState=2;
 	BeepNum = 0;
 	BeepCnt=0;
 }
 void SetBeepAck(void){
-	// 1¶ÌÒô
+	// 1çŸ­éŸ³
 	BeepState=3;
 	BeepNum = 0;
 	BeepCnt=0;
 	
 }
 void SetBeepPrompt(void){
-	// 2¶ÌÒô
+	// 2çŸ­éŸ³
 	BeepState=4;
 	BeepNum = 0;
 	BeepCnt=0;
 }
 void SetBeepError(void){
-	// Á¬Ğø³¤Òô
+	// è¿ç»­é•¿éŸ³
 	BeepState=5;
 	BeepNum = 0;
 	BeepCnt=0;
@@ -1098,7 +1097,7 @@ void Beep(void){
 				}
 			}
 			break;
-		case 1:// ÌáÊ¾Ã¦ 1¶Ì 1³¤
+		case 1:// æç¤ºå¿™ 1çŸ­ 1é•¿
 			switch(BeepCnt){
 					case 10:	DDRB  |= 0x80;				break;
 					case 200:	DDRB  &= 0x7f;				break;
@@ -1108,7 +1107,7 @@ void Beep(void){
 					default:	break;
 				}
 			break;
-		case 2:// ÌáÊ¾¾¯¸æ  1³¤Òô
+		case 2:// æç¤ºè­¦å‘Š  1é•¿éŸ³
 			switch(BeepCnt){
 					case 10:	DDRB  |= 0x80;				break;
 					case 2500:	DDRB  &= 0x7f;				break;
@@ -1116,7 +1115,7 @@ void Beep(void){
 					default:	break;
 				}
 			break;
-		case 3:	// ²Ù×÷Ó¦´ğ  1¶ÌÒô
+		case 3:	// æ“ä½œåº”ç­”  1çŸ­éŸ³
 			switch(BeepCnt){
 					case 10:	DDRB  |= 0x80;				break;
 					case 200:	DDRB  &= 0x7f;				break;
@@ -1124,7 +1123,7 @@ void Beep(void){
 					default:	break;
 				}
 			break;
-		case 4:	// Êä³öÌáÊ¾  2¶ÌÒô
+		case 4:	// è¾“å‡ºæç¤º  2çŸ­éŸ³
 			switch(BeepCnt){
 					case 10:	DDRB  |= 0x80;				break;
 					case 200:	DDRB  &= 0x7f;				break;
@@ -1134,7 +1133,7 @@ void Beep(void){
 					default:	break;
 				}
 			break;
-		case 5:	// ´íÎó Á¬Ğø³¤Òô
+		case 5:	// é”™è¯¯ è¿ç»­é•¿éŸ³
 			switch(BeepCnt){
 					case 10:	DDRB  |= 0x80;				break;
 					case 2500:	DDRB  &= 0x7f;				break;
@@ -1147,13 +1146,13 @@ void Beep(void){
 		}
 }
 
-// ÉèÖÃ×´Ì¬Ö¸Ê¾µÆ
+// è®¾ç½®çŠ¶æ€æŒ‡ç¤ºç¯
 void SetStateLedBusy(void)
 {
 	DDRE |= 0x30;
 	PORTE |= 0x10;
 	PORTE &= 0xdf;
-	if(_SampSW == 1)		// Î´Ëø¶¨°´¼ü,LED±äºì
+	if(_SampSW == 1)		// æœªé”å®šæŒ‰é”®,LEDå˜çº¢
 		_LEDSTATE = 0;
 }
 void SetStateLedFree(void)
@@ -1161,7 +1160,7 @@ void SetStateLedFree(void)
 	DDRE |= 0x30;
 	PORTE |= 0x20;
 	PORTE &= 0xef;
-	if(_SampSW == 1)		// Î´Ëø¶¨°´¼ü,LED±äÂÌ
+	if(_SampSW == 1)		// æœªé”å®šæŒ‰é”®,LEDå˜ç»¿
 		_LEDSTATE = 1;
 }
 /****************************************************************************************************/
