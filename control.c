@@ -354,8 +354,6 @@ void UpLoadingAllSensorState(void){
 }
 
 
-//GIT TEST
-
 // 从机事件处理和分配
 void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 	// 事件分配处理
@@ -467,7 +465,7 @@ void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 
 /*********************************************************************************************/
 
-
+//git test commet 2017/08/22
 
 /****************************************************************************************************/
 // 机械运行初始化
