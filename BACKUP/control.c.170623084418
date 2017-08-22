@@ -44,9 +44,6 @@ void InitControlLayerData(void){
 	EvenCardStoreProcess = 0;
 }
 
-unsigned int time;
-unsigned int uart1ReceiveOutTime;
-
 
 unsigned char GetRingPieceState(unsigned char n){
 	if(n>=RING_QUEUE_NUM)
@@ -222,6 +219,11 @@ unsigned char GetTurnPlateMonitorState(void)
 }
 */
 
+unsigned char Monitor[2][20] = 
+{
+	"StopMonitor","ZeroMonitor"
+};
+
 signed char GetMotorMonitorState(unsigned char slave,unsigned char num)
 {
 	if(slave == 0 || slave == 6 || slave == 7)	
@@ -246,7 +248,7 @@ signed char GetMotorMonitorState(unsigned char slave,unsigned char num)
 		case 14:uart_Printf(":STORE_MONITOR");break;
 		default:break;
 	}
-	uart_Printf("$%2d $%2d\r\n",num,MotModulePhoSta[slave][num]);
+	uart_Printf("$%2d\r\n",MotModulePhoSta[slave][num]);
 	//uart_Printf("%s:%s.%s $%2d\r\n",strM3175,SlaveID[slave],Monitor[num],MotModulePhoSta[MOT_TURN_PLATE][num]);
 	Uart0ReEnable;
 	return MotModulePhoSta[slave][num];

@@ -44,9 +44,6 @@ void InitControlLayerData(void){
 	EvenCardStoreProcess = 0;
 }
 
-unsigned int time;
-unsigned int uart1ReceiveOutTime;
-
 
 unsigned char GetRingPieceState(unsigned char n){
 	if(n>=RING_QUEUE_NUM)

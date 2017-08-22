@@ -1,0 +1,2857 @@
+                        .module testQueueProcess.c
+                        .area text(rom, con, rel)
+                        .even
+ 0000           _TestALampOpen::
+ 0000           ; 
+ 0000           ; 
+ 0000           ; #include <iom1280v.h>
+ 0000           ; #include "B1404_LIB.h"
+ 0000           ; #include "Common.h"
+ 0000           ; #include "eeprom.h"
+ 0000           ; 
+ 0000           ; unsigned char insertflag[30];	// 插入转盘标志  255 插入  200 下片 0 空闲
+ 0000           ; 
+ 0000           ; TEST_QUEUE TestQueueA;
+ 0000           ; TEST_QUEUE TestQueueB;
+ 0000           ; extern RING_QUEUE	RingQueue;
+ 0000           ; extern unsigned long SecondCount;	// 秒时钟计数
+ 0000           ; extern unsigned char TurnPlateUsedLock;		// 转盘使用锁
+ 0000           ; static unsigned char LampAState;
+ 0000           ; static unsigned char LampBState;
+ 0000           ; static unsigned char ReadColseAnswer;
+ 0000           ; extern unsigned char CardNoneUseful;
+ 0000           ; 
+ 0000           ; void TestALampOpen(void){
+ 0000           ; 	DDRH |= 0x70;	
+ 0000 80910101          lds R24,257
+ 0004 8067              ori R24,112
+ 0006 80930101          sts 257,R24
+ 000A           ;       PORTH &= 0xcf;
+ 000A 80910201          lds R24,258
+ 000E 8F7C              andi R24,207
+ 0010 80930201          sts 258,R24
+ 0014           ;       PORTH |= 0x40;
+ 0014 80910201          lds R24,258
+ 0018 8064              ori R24,64
+ 001A 80930201          sts 258,R24
+ 001E           ;       LampAState = 1;
+ 001E 81E0              ldi R24,1
+ 0020 80931500          sts _LampAState,R24
+ 0024           L1:
+ 0024                   .dbline 0 ; func end
+ 0024 0895              ret
+                        .even
+ 0026           _TestALampClose::
+ 0026           ; }
+ 0026           ; void TestALampClose(void){
+ 0026           ; 	DDRH &= 0x8f;	
+ 0026 80910101          lds R24,257
+ 002A 8F78              andi R24,143
+ 002C 80930101          sts 257,R24
+ 0030           ;       PORTH &= 0x8f;
+ 0030 80910201          lds R24,258
+ 0034 8F78              andi R24,143
+ 0036 80930201          sts 258,R24
+ 003A           ;       LampAState = 0;
+ 003A 2224              clr R2
+ 003C 20921500          sts _LampAState,R2
+ 0040           L2:
+ 0040                   .dbline 0 ; func end
+ 0040 0895              ret
+                        .even
+ 0042           _TestBLampOpen::
+ 0042           ; }
+ 0042           ; void TestBLampOpen(void){
+ 0042           ; 	DDRL |= 0x70;	
+ 0042 80910A01          lds R24,266
+ 0046 8067              ori R24,112
+ 0048 80930A01          sts 266,R24
+ 004C           ;       PORTL &= 0xcf;
+ 004C 80910B01          lds R24,267
+ 0050 8F7C              andi R24,207
+ 0052 80930B01          sts 267,R24
+ 0056           ;       PORTL |= 0x40;
+ 0056 80910B01          lds R24,267
+ 005A 8064              ori R24,64
+ 005C 80930B01          sts 267,R24
+ 0060           ;       LampBState = 1;
+ 0060 81E0              ldi R24,1
+ 0062 80931400          sts _LampBState,R24
+ 0066           L3:
+ 0066                   .dbline 0 ; func end
+ 0066 0895              ret
+                        .even
+ 0068           _TestBLampClose::
+ 0068           ; }
+ 0068           ; void TestBLampClose(void){
+ 0068           ; 	DDRL &= 0x8f;
+ 0068 80910A01          lds R24,266
+ 006C 8F78              andi R24,143
+ 006E 80930A01          sts 266,R24
+ 0072           ;       PORTL &= 0x8f;
+ 0072 80910B01          lds R24,267
+ 0076 8F78              andi R24,143
+ 0078 80930B01          sts 267,R24
+ 007C           ;       LampBState = 0;
+ 007C 2224              clr R2
+ 007E 20921400          sts _LampBState,R2
+ 0082           L4:
+ 0082                   .dbline 0 ; func end
+ 0082 0895              ret
+ 0084           ;        lampPWM -> y+2
+ 0084           ;              n -> R20
+                        .even
+ 0084           _ReSetTestLampPWM::
+ 0084 4A93              st -y,R20
+ 0086 5A93              st -y,R21
+ 0088 402F              mov R20,R16
+ 008A 2497              sbiw R28,4
+ 008C           ; }
+ 008C           ; 
+ 008C           ; void ReSetTestLampPWM(unsigned char n){
+ 008C           ;       // 读取光源设置值并设置
+ 008C           ;       unsigned int lampPWM;
+ 008C           ;       if(n<4){
+ 008C 4430              cpi R20,4
+ 008E 08F0              brlo X5
+ 0090 4BC0              xjmp L6
+ 0092           X5:
+ 0092           X0:
+ 0092           ; 		EEPROM_READ(EEP_ADD_LAMPSET+n*2,   lampPWM);
+ 0092 82E0              ldi R24,2
+ 0094 90E0              ldi R25,0
+ 0096 9983              std y+1,R25
+ 0098 8883              std y+0,R24
+ 009A 9E01              movw R18,R28
+ 009C 2E5F              subi R18,254  ; offset = 2
+ 009E 3F4F              sbci R19,255
+ 00A0 042F              mov R16,R20
+ 00A2 1127              clr R17
+ 00A4 000F              lsl R16
+ 00A6 111F              rol R17
+ 00A8 0C5A              subi R16,172  ; offset = 84
+ 00AA 1F4F              sbci R17,255
+ 00AC 0E940000          xcall _EEPROMReadBytes_extIO
+ 00B0           ;       //      lampPWM = lampPWM + 512;
+ 00B0           ;               switch(n){
+ 00B0 5527              clr R21
+ 00B2 4030              cpi R20,0
+ 00B4 4507              cpc R20,R21
+ 00B6 69F0              breq L11
+ 00B8           X1:
+ 00B8 4130              cpi R20,1
+ 00BA E0E0              ldi R30,0
+ 00BC 5E07              cpc R21,R30
+ 00BE A1F0              breq L12
+ 00C0           X2:
+ 00C0 4230              cpi R20,2
+ 00C2 E0E0              ldi R30,0
+ 00C4 5E07              cpc R21,R30
+ 00C6 D9F0              breq L13
+ 00C8           X3:
+ 00C8 4330              cpi R20,3
+ 00CA E0E0              ldi R30,0
+ 00CC 5E07              cpc R21,R30
+ 00CE 11F1              breq L14
+ 00D0           X4:
+ 00D0 2BC0              xjmp L9
+ 00D2           L11:
+ 00D2           ; 			case 0:		OCR4BH = lampPWM>>8;	OCR4BL = (unsigned char)lampPWM;	break;
+ 00D2 2A80              ldd R2,y+2
+ 00D4 3B80              ldd R3,y+3
+ 00D6 232C              mov R2,R3
+ 00D8 3324              clr R3
+ 00DA 2092AB00          sts 171,R2
+ 00DE 2A80              ldd R2,y+2
+ 00E0 3B80              ldd R3,y+3
+ 00E2 2092AA00          sts 170,R2
+ 00E6 20C0              xjmp L9
+ 00E8           L12:
+ 00E8           ; 			case 1:		OCR4CH = lampPWM>>8;	OCR4CL = (unsigned char)lampPWM;	break;
+ 00E8 2A80              ldd R2,y+2
+ 00EA 3B80              ldd R3,y+3
+ 00EC 232C              mov R2,R3
+ 00EE 3324              clr R3
+ 00F0 2092AD00          sts 173,R2
+ 00F4 2A80              ldd R2,y+2
+ 00F6 3B80              ldd R3,y+3
+ 00F8 2092AC00          sts 172,R2
+ 00FC 15C0              xjmp L9
+ 00FE           L13:
+ 00FE           ; 			case 2:		OCR5BH = lampPWM>>8;	OCR5BL = (unsigned char)lampPWM;	break;
+ 00FE 2A80              ldd R2,y+2
+ 0100 3B80              ldd R3,y+3
+ 0102 232C              mov R2,R3
+ 0104 3324              clr R3
+ 0106 20922B01          sts 299,R2
+ 010A 2A80              ldd R2,y+2
+ 010C 3B80              ldd R3,y+3
+ 010E 20922A01          sts 298,R2
+ 0112 0AC0              xjmp L9
+ 0114           L14:
+ 0114           ; 			case 3:		OCR5CH = lampPWM>>8;	OCR5CL = (unsigned char)lampPWM;	break;
+ 0114 2A80              ldd R2,y+2
+ 0116 3B80              ldd R3,y+3
+ 0118 232C              mov R2,R3
+ 011A 3324              clr R3
+ 011C 20922D01          sts 301,R2
+ 0120 2A80              ldd R2,y+2
+ 0122 3B80              ldd R3,y+3
+ 0124 20922C01          sts 300,R2
+ 0128           ;                       default:        break;
+ 0128           L9:
+ 0128           ; 			}
+ 0128           ; 		}
+ 0128           L6:
+ 0128           L5:
+ 0128                   .dbline 0 ; func end
+ 0128 2496              adiw R28,4
+ 012A 5991              ld R21,y+
+ 012C 4991              ld R20,y+
+ 012E 0895              ret
+ 0130           ;        lampPWM -> y+2
+ 0130           ;              n -> R20
+                        .even
+ 0130           _ReadTestLampPWM::
+ 0130 4A93              st -y,R20
+ 0132 402F              mov R20,R16
+ 0134 2497              sbiw R28,4
+ 0136           ; }
+ 0136           ; unsigned int ReadTestLampPWM(unsigned char n){
+ 0136           ;       unsigned int lampPWM;
+ 0136           ;       if(n<4){
+ 0136 4430              cpi R20,4
+ 0138 90F4              brsh L16
+ 013A           X6:
+ 013A           ; 		EEPROM_READ(EEP_ADD_LAMPSET+n*2,   lampPWM);
+ 013A 82E0              ldi R24,2
+ 013C 90E0              ldi R25,0
+ 013E 9983              std y+1,R25
+ 0140 8883              std y+0,R24
+ 0142 9E01              movw R18,R28
+ 0144 2E5F              subi R18,254  ; offset = 2
+ 0146 3F4F              sbci R19,255
+ 0148 042F              mov R16,R20
+ 014A 1127              clr R17
+ 014C 000F              lsl R16
+ 014E 111F              rol R17
+ 0150 0C5A              subi R16,172  ; offset = 84
+ 0152 1F4F              sbci R17,255
+ 0154 0E940000          xcall _EEPROMReadBytes_extIO
+ 0158           ;               return lampPWM;
+ 0158 0A81              ldd R16,y+2
+ 015A 1B81              ldd R17,y+3
+ 015C 02C0              xjmp L15
+ 015E           L16:
+ 015E           ; 		}
+ 015E           ; 	return 0;
+ 015E 0027              clr R16
+ 0160 1127              clr R17
+ 0162           L15:
+ 0162                   .dbline 0 ; func end
+ 0162 2496              adiw R28,4
+ 0164 4991              ld R20,y+
+ 0166 0895              ret
+ 0168           ;              i -> <dead>
+ 0168           ;        lampPWM -> y+2
+ 0168           ;            adj -> R22,R23
+ 0168           ;              n -> R20
+                        .even
+ 0168           _AdjustTestLamp::
+ 0168 0E940000          xcall push_xgsetF000
+ 016C B901              movw R22,R18
+ 016E 402F              mov R20,R16
+ 0170 2497              sbiw R28,4
+ 0172           ; }
+ 0172           ; 
+ 0172           ; // 调整光源值,上位机输入正或者负的调整量,完毕向上位机返回调整完后的结果
+ 0172           ; unsigned int AdjustTestLamp(unsigned char n, unsigned int adj){
+ 0172           ;       // 光源序号和调整量
+ 0172           ;       // 返回调整后的结果
+ 0172           ;       unsigned int lampPWM;
+ 0172           ;       signed int i;
+ 0172           ;       
+ 0172           ;       if(n<4){
+ 0172 4430              cpi R20,4
+ 0174 F8F4              brsh L19
+ 0176           X7:
+ 0176           ; 		if(adj == 0)
+ 0176 6030              cpi R22,0
+ 0178 6707              cpc R22,R23
+ 017A 11F4              brne L21
+ 017C           X8:
+ 017C           ; 			adj = 1;
+ 017C 61E0              ldi R22,1
+ 017E 70E0              ldi R23,0
+ 0180           L21:
+ 0180           ; 		if(adj > 1020)
+ 0180 8CEF              ldi R24,1020
+ 0182 93E0              ldi R25,3
+ 0184 8617              cp R24,R22
+ 0186 9707              cpc R25,R23
+ 0188 10F4              brsh L23
+ 018A           X9:
+ 018A           ; 			adj = 1020;
+ 018A 6CEF              ldi R22,1020
+ 018C 73E0              ldi R23,3
+ 018E           L23:
+ 018E           ; 		lampPWM = adj;
+ 018E 7B83              std y+3,R23
+ 0190 6A83              std y+2,R22
+ 0192           ;               EEPROM_WRITE(EEP_ADD_LAMPSET+n*2,   lampPWM);
+ 0192 82E0              ldi R24,2
+ 0194 90E0              ldi R25,0
+ 0196 9983              std y+1,R25
+ 0198 8883              std y+0,R24
+ 019A 9E01              movw R18,R28
+ 019C 2E5F              subi R18,254  ; offset = 2
+ 019E 3F4F              sbci R19,255
+ 01A0 042F              mov R16,R20
+ 01A2 1127              clr R17
+ 01A4 000F              lsl R16
+ 01A6 111F              rol R17
+ 01A8 0C5A              subi R16,172  ; offset = 84
+ 01AA 1F4F              sbci R17,255
+ 01AC 0E940000          xcall _EEPROMWriteBytes_extIO
+ 01B0           ;               ReSetTestLampPWM(n);
+ 01B0 042F              mov R16,R20
+ 01B2 68DF              xcall _ReSetTestLampPWM
+ 01B4           ;               }
+ 01B4           L19:
+ 01B4           ; 	return lampPWM;
+ 01B4 0A81              ldd R16,y+2
+ 01B6 1B81              ldd R17,y+3
+ 01B8           L18:
+ 01B8                   .dbline 0 ; func end
+ 01B8 2496              adiw R28,4
+ 01BA 0C940000          xjmp pop_xgsetF000
+                        .even
+ 01BE           _SetReadCloseAnswer::
+ 01BE           ; }
+ 01BE           ; 
+ 01BE           ; unsigned char SetReadCloseAnswer(void)
+ 01BE           ; {
+ 01BE           ; 	ReadColseAnswer = 1;
+ 01BE 81E0              ldi R24,1
+ 01C0 80931300          sts _ReadColseAnswer,R24
+ 01C4           ;       Uart0ReUnable;
+ 01C4 8091C100          lds R24,193
+ 01C8 8F7E              andi R24,239
+ 01CA 8093C100          sts 193,R24
+ 01CE           ;       uart_Printf("%s\r\n",strM3159);
+ 01CE 20E0              ldi R18,<_strM3159
+ 01D0 30E0              ldi R19,>_strM3159
+ 01D2 00E0              ldi R16,<L26
+ 01D4 10E0              ldi R17,>L26
+ 01D6 0E940000          xcall _uart_Printf
+ 01DA           ;       Uart0ReEnable;
+ 01DA 8091C100          lds R24,193
+ 01DE 8061              ori R24,16
+ 01E0 8093C100          sts 193,R24
+ 01E4           L25:
+ 01E4                   .dbline 0 ; func end
+ 01E4 0895              ret
+ 01E6           ;          pChar -> R22,R23
+ 01E6           ;              i -> R20,R21
+                        .even
+ 01E6           _TestQueueDatInit::
+ 01E6 0E940000          xcall push_xgsetF000
+ 01EA           ; }
+ 01EA           ; 
+ 01EA           ; void TestQueueDatInit(void){
+ 01EA           ;       unsigned int i;
+ 01EA           ;       unsigned char *pChar;
+ 01EA           ; 
+ 01EA           ;       pChar = (unsigned char *)&(TestQueueA);
+ 01EA 60E0              ldi R22,<_TestQueueA
+ 01EC 70E0              ldi R23,>_TestQueueA
+ 01EE           ;       for(i=0; i<sizeof(TEST_QUEUE); i++){
+ 01EE 4427              clr R20
+ 01F0 5527              clr R21
+ 01F2 06C0              xjmp L31
+ 01F4           L28:
+ 01F4           ; 		*pChar++ = 0;
+ 01F4 2224              clr R2
+ 01F6 FB01              movw R30,R22
+ 01F8 2192              st Z+,R2
+ 01FA BF01              movw R22,R30
+ 01FC           ;               }
+ 01FC           L29:
+ 01FC 4F5F              subi R20,255  ; offset = 1
+ 01FE 5F4F              sbci R21,255
+ 0200           L31:
+ 0200 493C              cpi R20,201
+ 0202 E0E0              ldi R30,0
+ 0204 5E07              cpc R21,R30
+ 0206 B0F3              brlo L28
+ 0208           X10:
+ 0208           ; 	pChar = (unsigned char *)&(TestQueueB);
+ 0208 60E0              ldi R22,<_TestQueueB
+ 020A 70E0              ldi R23,>_TestQueueB
+ 020C           ;       for(i=0; i<sizeof(TEST_QUEUE); i++){
+ 020C 4427              clr R20
+ 020E 5527              clr R21
+ 0210 06C0              xjmp L35
+ 0212           L32:
+ 0212           ; 		*pChar++ = 0;
+ 0212 2224              clr R2
+ 0214 FB01              movw R30,R22
+ 0216 2192              st Z+,R2
+ 0218 BF01              movw R22,R30
+ 021A           ;               }
+ 021A           L33:
+ 021A 4F5F              subi R20,255  ; offset = 1
+ 021C 5F4F              sbci R21,255
+ 021E           L35:
+ 021E 493C              cpi R20,201
+ 0220 E0E0              ldi R30,0
+ 0222 5E07              cpc R21,R30
+ 0224 B0F3              brlo L32
+ 0226           X11:
+ 0226           ; 	for(i=0; i<TEST_QUEUE_NUM; i++){
+ 0226 4427              clr R20
+ 0228 5527              clr R21
+ 022A 10C0              xjmp L39
+ 022C           L36:
+ 022C           ; 		TestQueueA.ringNum[i] = 0xff;
+ 022C 80E0              ldi R24,<_TestQueueA
+ 022E 90E0              ldi R25,>_TestQueueA
+ 0230 FA01              movw R30,R20
+ 0232 E80F              add R30,R24
+ 0234 F91F              adc R31,R25
+ 0236 8FEF              ldi R24,255
+ 0238 8083              std z+0,R24
+ 023A           ;               TestQueueB.ringNum[i] = 0xff;
+ 023A 80E0              ldi R24,<_TestQueueB
+ 023C 90E0              ldi R25,>_TestQueueB
+ 023E FA01              movw R30,R20
+ 0240 E80F              add R30,R24
+ 0242 F91F              adc R31,R25
+ 0244 8FEF              ldi R24,255
+ 0246 8083              std z+0,R24
+ 0248           ;               }
+ 0248           L37:
+ 0248 4F5F              subi R20,255  ; offset = 1
+ 024A 5F4F              sbci R21,255
+ 024C           L39:
+ 024C 4832              cpi R20,40
+ 024E E0E0              ldi R30,0
+ 0250 5E07              cpc R21,R30
+ 0252 60F3              brlo L36
+ 0254           X12:
+ 0254           ; 	ReSetTestLampPWM(0);
+ 0254 0027              clr R16
+ 0256 16DF              xcall _ReSetTestLampPWM
+ 0258           ;       ReSetTestLampPWM(1);
+ 0258 01E0              ldi R16,1
+ 025A 14DF              xcall _ReSetTestLampPWM
+ 025C           ;       ReSetTestLampPWM(2);
+ 025C 02E0              ldi R16,2
+ 025E 12DF              xcall _ReSetTestLampPWM
+ 0260           ;       ReSetTestLampPWM(3);
+ 0260 03E0              ldi R16,3
+ 0262 10DF              xcall _ReSetTestLampPWM
+ 0264           L27:
+ 0264                   .dbline 0 ; func end
+ 0264 0C940000          xjmp pop_xgsetF000
+ 0268           ;           time -> y+0
+ 0268           ;              i -> R10
+ 0268           ;       testTime -> y+10
+ 0268           ;     pTestQueue -> R16,R17
+                        .even
+ 0268           _TestQueueInsertCalculate::
+ 0268 3A93              st -y,r19
+ 026A 2A93              st -y,r18
+ 026C 0E940000          xcall push_xgsetF00C
+ 0270 2497              sbiw R28,4
+ 0272           ; }
+ 0272           ; 
+ 0272           ; unsigned char TestQueueInsertCalculate(TEST_QUEUE * pTestQueue, signed long testTime){
+ 0272           ;       unsigned char i;
+ 0272           ;       signed long time;
+ 0272           ;       for(i=0; i<TEST_QUEUE_NUM; i++){                // 按顺序遍历队列，以测试时间为条件找出合适的位置插入队列
+ 0272 AA24              clr R10
+ 0274 56C0              xjmp L44
+ 0276           L41:
+ 0276           ; 		time = pTestQueue->testTime[i];
+ 0276 C801              movw R24,R16
+ 0278 8896              adiw R24,40
+ 027A EA2D              mov R30,R10
+ 027C FF27              clr R31
+ 027E EE0F              lsl R30
+ 0280 FF1F              rol R31
+ 0282 EE0F              lsl R30
+ 0284 FF1F              rol R31
+ 0286 E80F              add R30,R24
+ 0288 F91F              adc R31,R25
+ 028A 2080              ldd R2,z+0
+ 028C 3180              ldd R3,z+1
+ 028E 4280              ldd R4,z+2
+ 0290 5380              ldd R5,z+3
+ 0292 2882              std y+0,R2
+ 0294 3982              std y+1,R3
+ 0296 4A82              std y+2,R4
+ 0298 5B82              std y+3,R5
+ 029A           ;               if(time == 0){
+ 029A 2880              ldd R2,y+0
+ 029C 3980              ldd R3,y+1
+ 029E 4A80              ldd R4,y+2
+ 02A0 5B80              ldd R5,y+3
+ 02A2 8894              clc
+ 02A4 2220              tst R2
+ 02A6 3204              cpc R3,R2
+ 02A8 4204              cpc R4,R2
+ 02AA 5204              cpc R5,R2
+ 02AC 11F4              brne L45
+ 02AE           X13:
+ 02AE           ; 			// 在队尾，插入队尾
+ 02AE           ; 			return i;	// 返回插入位置
+ 02AE 0A2D              mov R16,R10
+ 02B0 3DC0              xjmp L40
+ 02B2           L45:
+ 02B2           ; 			}
+ 02B2           ; 		else{	// 在队列中间，和当前队列元素的时间做比较
+ 02B2           ; 			time += TEST_CYCLE_TIME;
+ 02B2 4FE0              ldi R20,15
+ 02B4 50E0              ldi R21,0
+ 02B6 60E0              ldi R22,0
+ 02B8 70E0              ldi R23,0
+ 02BA 2880              ldd R2,y+0
+ 02BC 3980              ldd R3,y+1
+ 02BE 4A80              ldd R4,y+2
+ 02C0 5B80              ldd R5,y+3
+ 02C2 240E              add R2,R20
+ 02C4 351E              adc R3,R21
+ 02C6 461E              adc R4,R22
+ 02C8 571E              adc R5,R23
+ 02CA 2882              std y+0,R2
+ 02CC 3982              std y+1,R3
+ 02CE 4A82              std y+2,R4
+ 02D0 5B82              std y+3,R5
+ 02D2           ;                       if(testTime>time){      // 插入的时间在当前元素时间之后，继续比较下个队列元素
+ 02D2 2880              ldd R2,y+0
+ 02D4 3980              ldd R3,y+1
+ 02D6 4A80              ldd R4,y+2
+ 02D8 5B80              ldd R5,y+3
+ 02DA 6A84              ldd R6,y+10
+ 02DC 7B84              ldd R7,y+11
+ 02DE 8C84              ldd R8,y+12
+ 02E0 9D84              ldd R9,y+13
+ 02E2 2614              cp R2,R6
+ 02E4 3704              cpc R3,R7
+ 02E6 4804              cpc R4,R8
+ 02E8 5904              cpc R5,R9
+ 02EA 0CF4              brge L47
+ 02EC           X14:
+ 02EC           ; 				continue;		// 继续判断下一个
+ 02EC 19C0              xjmp L42
+ 02EE           L47:
+ 02EE           ; 				}
+ 02EE           ; 			else if(testTime<=(time-TEST_CYCLE_TIME)){	// 插入的时间在当前元素时间前
+ 02EE 4FE0              ldi R20,15
+ 02F0 50E0              ldi R21,0
+ 02F2 60E0              ldi R22,0
+ 02F4 70E0              ldi R23,0
+ 02F6 2880              ldd R2,y+0
+ 02F8 3980              ldd R3,y+1
+ 02FA 4A80              ldd R4,y+2
+ 02FC 5B80              ldd R5,y+3
+ 02FE 241A              sub R2,R20
+ 0300 350A              sbc R3,R21
+ 0302 460A              sbc R4,R22
+ 0304 570A              sbc R5,R23
+ 0306 6A84              ldd R6,y+10
+ 0308 7B84              ldd R7,y+11
+ 030A 8C84              ldd R8,y+12
+ 030C 9D84              ldd R9,y+13
+ 030E 2614              cp R2,R6
+ 0310 3704              cpc R3,R7
+ 0312 4804              cpc R4,R8
+ 0314 5904              cpc R5,R9
+ 0316 14F0              brlt L49
+ 0318           X15:
+ 0318           ; 				// 插入队中间
+ 0318           ; 				return i;	// 返回插入位置
+ 0318 0A2D              mov R16,R10
+ 031A 08C0              xjmp L40
+ 031C           L49:
+ 031C           ; 				}
+ 031C           ; 			else{
+ 031C           ; 				// 和当前元素时间有冲突，不能插入
+ 031C           ; 				return 0xff;
+ 031C 0FEF              ldi R16,255
+ 031E 06C0              xjmp L40
+ 0320           L42:
+ 0320 A394              inc R10
+ 0322           L44:
+ 0322 8A2D              mov R24,R10
+ 0324 8832              cpi R24,40
+ 0326 08F4              brsh X17
+ 0328 A6CF              xjmp L41
+ 032A           X17:
+ 032A           X16:
+ 032A           ; 				}
+ 032A           ; 			}
+ 032A           ; 		}
+ 032A           ; 	return 0xff;
+ 032A 0FEF              ldi R16,255
+ 032C           L40:
+ 032C                   .dbline 0 ; func end
+ 032C 2496              adiw R28,4
+ 032E 0E940000          xcall pop_xgsetF00C
+ 0332 2296              adiw R28,2
+ 0334 0895              ret
+ 0336           ;              i -> R20
+ 0336           ;       testTime -> y+4
+ 0336           ;        ringNum -> R10
+ 0336           ;            idx -> R18
+ 0336           ;     pTestQueue -> R16,R17
+                        .even
+ 0336           _TestQueueInsert::
+ 0336 AA92              st -y,R10
+ 0338 4A93              st -y,R20
+ 033A AA80              ldd R10,y+2
+ 033C           ; }
+ 033C           ; 
+ 033C           ; void TestQueueInsert(TEST_QUEUE * pTestQueue, unsigned char idx, unsigned char ringNum, signed long testTime){
+ 033C           ;       // 测试队列插入新任务
+ 033C           ;       // pTestQueue:测试队列，idx:插入位置，ringNum:转盘上的编号，testTime:测试时间
+ 033C           ;       unsigned char i;
+ 033C           ;       i = TEST_QUEUE_NUM-1;
+ 033C 47E2              ldi R20,39
+ 033E 41C0              xjmp L53
+ 0340           L52:
+ 0340           ; 	while(i--){
+ 0340           ; 		if(i != idx){
+ 0340 4217              cp R20,R18
+ 0342 39F1              breq L55
+ 0344           X18:
+ 0344           ; 			pTestQueue->testTime[i] = pTestQueue->testTime[i-1];
+ 0344 C801              movw R24,R16
+ 0346 8896              adiw R24,40
+ 0348 E42F              mov R30,R20
+ 034A FF27              clr R31
+ 034C 3197              sbiw R30,1
+ 034E EE0F              lsl R30
+ 0350 FF1F              rol R31
+ 0352 EE0F              lsl R30
+ 0354 FF1F              rol R31
+ 0356 E80F              add R30,R24
+ 0358 F91F              adc R31,R25
+ 035A 2080              ldd R2,z+0
+ 035C 3180              ldd R3,z+1
+ 035E 4280              ldd R4,z+2
+ 0360 5380              ldd R5,z+3
+ 0362 E42F              mov R30,R20
+ 0364 FF27              clr R31
+ 0366 EE0F              lsl R30
+ 0368 FF1F              rol R31
+ 036A EE0F              lsl R30
+ 036C FF1F              rol R31
+ 036E E80F              add R30,R24
+ 0370 F91F              adc R31,R25
+ 0372 2082              std z+0,R2
+ 0374 3182              std z+1,R3
+ 0376 4282              std z+2,R4
+ 0378 5382              std z+3,R5
+ 037A           ;                       pTestQueue->ringNum[i] = pTestQueue->ringNum[i-1];
+ 037A E42F              mov R30,R20
+ 037C FF27              clr R31
+ 037E 3197              sbiw R30,1
+ 0380 E00F              add R30,R16
+ 0382 F11F              adc R31,R17
+ 0384 2080              ldd R2,z+0
+ 0386 E42F              mov R30,R20
+ 0388 FF27              clr R31
+ 038A E00F              add R30,R16
+ 038C F11F              adc R31,R17
+ 038E 2082              std z+0,R2
+ 0390           ;                       }
+ 0390 18C0              xjmp L56
+ 0392           L55:
+ 0392           ; 		else{
+ 0392           ; 			pTestQueue->testTime[i] = testTime;
+ 0392 C801              movw R24,R16
+ 0394 8896              adiw R24,40
+ 0396 E42F              mov R30,R20
+ 0398 FF27              clr R31
+ 039A EE0F              lsl R30
+ 039C FF1F              rol R31
+ 039E EE0F              lsl R30
+ 03A0 FF1F              rol R31
+ 03A2 E80F              add R30,R24
+ 03A4 F91F              adc R31,R25
+ 03A6 2C80              ldd R2,y+4
+ 03A8 3D80              ldd R3,y+5
+ 03AA 4E80              ldd R4,y+6
+ 03AC 5F80              ldd R5,y+7
+ 03AE 2082              std z+0,R2
+ 03B0 3182              std z+1,R3
+ 03B2 4282              std z+2,R4
+ 03B4 5382              std z+3,R5
+ 03B6           ;                       pTestQueue->ringNum[i] = ringNum;
+ 03B6 E42F              mov R30,R20
+ 03B8 FF27              clr R31
+ 03BA E00F              add R30,R16
+ 03BC F11F              adc R31,R17
+ 03BE A082              std z+0,R10
+ 03C0           ;                       return;
+ 03C0 06C0              xjmp L51
+ 03C2           L56:
+ 03C2           ; 			}
+ 03C2           ; 		}
+ 03C2           L53:
+ 03C2 242E              mov R2,R20
+ 03C4 3324              clr R3
+ 03C6 4150              subi R20,1
+ 03C8 2220              tst R2
+ 03CA 09F0              breq X20
+ 03CC B9CF              xjmp L52
+ 03CE           X20:
+ 03CE           X19:
+ 03CE           L51:
+ 03CE                   .dbline 0 ; func end
+ 03CE 4991              ld R20,y+
+ 03D0 A990              ld R10,y+
+ 03D2 0895              ret
+ 03D4           ;              i -> R20
+ 03D4           ;     pTestQueue -> R16,R17
+                        .even
+ 03D4           _TestQueueForward::
+ 03D4 4A93              st -y,R20
+ 03D6           ; }
+ 03D6           ; void TestQueueForward(TEST_QUEUE * pTestQueue){
+ 03D6           ;       // 测试队列前进一步，当队头测试完毕后，队头元素删除队列前进一步
+ 03D6           ;       unsigned char i;
+ 03D6           ;       for(i=0; i<TEST_QUEUE_NUM; i++){
+ 03D6 4427              clr R20
+ 03D8 3BC0              xjmp L61
+ 03DA           L58:
+ 03DA           ; 		if(i != (TEST_QUEUE_NUM-1)){
+ 03DA 4732              cpi R20,39
+ 03DC 19F1              breq L62
+ 03DE           X21:
+ 03DE           ; 			// 每个元素往前移动一个，队头元素被后面覆盖
+ 03DE           ; 			pTestQueue->testTime[i] = pTestQueue->testTime[i+1];
+ 03DE C801              movw R24,R16
+ 03E0 8896              adiw R24,40
+ 03E2 E42F              mov R30,R20
+ 03E4 FF27              clr R31
+ 03E6 3196              adiw R30,1
+ 03E8 EE0F              lsl R30
+ 03EA FF1F              rol R31
+ 03EC EE0F              lsl R30
+ 03EE FF1F              rol R31
+ 03F0 E80F              add R30,R24
+ 03F2 F91F              adc R31,R25
+ 03F4 2080              ldd R2,z+0
+ 03F6 3180              ldd R3,z+1
+ 03F8 4280              ldd R4,z+2
+ 03FA 5380              ldd R5,z+3
+ 03FC E42F              mov R30,R20
+ 03FE FF27              clr R31
+ 0400 EE0F              lsl R30
+ 0402 FF1F              rol R31
+ 0404 EE0F              lsl R30
+ 0406 FF1F              rol R31
+ 0408 E80F              add R30,R24
+ 040A F91F              adc R31,R25
+ 040C 2082              std z+0,R2
+ 040E 3182              std z+1,R3
+ 0410 4282              std z+2,R4
+ 0412 5382              std z+3,R5
+ 0414           ;                       pTestQueue->ringNum[i] = pTestQueue->ringNum[i+1];
+ 0414 242E              mov R2,R20
+ 0416 3324              clr R3
+ 0418 200E              add R2,R16
+ 041A 311E              adc R3,R17
+ 041C F101              movw R30,R2
+ 041E 2180              ldd R2,z+1
+ 0420 2082              std z+0,R2
+ 0422           ;                       }
+ 0422 15C0              xjmp L63
+ 0424           L62:
+ 0424           ; 		else{
+ 0424           ; 			// 队尾填充零
+ 0424           ; 			pTestQueue->testTime[i] = 0;
+ 0424 C801              movw R24,R16
+ 0426 8896              adiw R24,40
+ 0428 E42F              mov R30,R20
+ 042A FF27              clr R31
+ 042C EE0F              lsl R30
+ 042E FF1F              rol R31
+ 0430 EE0F              lsl R30
+ 0432 FF1F              rol R31
+ 0434 E80F              add R30,R24
+ 0436 F91F              adc R31,R25
+ 0438 80E0              ldi R24,0
+ 043A 8083              std z+0,R24
+ 043C 8183              std z+1,R24
+ 043E 8283              std z+2,R24
+ 0440 8383              std z+3,R24
+ 0442           ;                       pTestQueue->ringNum[i] = 0xff;
+ 0442 E42F              mov R30,R20
+ 0444 FF27              clr R31
+ 0446 E00F              add R30,R16
+ 0448 F11F              adc R31,R17
+ 044A 8FEF              ldi R24,255
+ 044C 8083              std z+0,R24
+ 044E           ;                       }
+ 044E           L63:
+ 044E           ; 		}
+ 044E           L59:
+ 044E 4395              inc R20
+ 0450           L61:
+ 0450 4832              cpi R20,40
+ 0452 08F4              brsh X23
+ 0454 C2CF              xjmp L58
+ 0456           X23:
+ 0456           X22:
+ 0456           L57:
+ 0456                   .dbline 0 ; func end
+ 0456 4991              ld R20,y+
+ 0458 0895              ret
+ 045A           ;     pTestQueue -> R20,R21
+ 045A           ;          inst1 -> R22
+ 045A           ;          inst0 -> R12
+ 045A           ;      testTime1 -> y+10
+ 045A           ;      testTime0 -> y+6
+ 045A           ;        ringNum -> R10
+ 045A           ;       sampInfo -> R20,R21
+                        .even
+ 045A           _InsertNewTest::
+ 045A 0E940000          xcall push_xgsetF03C
+ 045E A22E              mov R10,R18
+ 0460 A801              movw R20,R16
+ 0462 2E97              sbiw R28,14
+ 0464           ; }
+ 0464           ; 
+ 0464           ; unsigned char InsertNewTest(SAMP_INFO * sampInfo, unsigned char ringNum){
+ 0464           ;       // 新的测试插入测试队列，稀释完准备滴样时调用本函数，直到插入成功
+ 0464           ;       // 插入成功返回0，失败返回0xff
+ 0464           ;       unsigned char inst0, inst1;
+ 0464           ;       signed long testTime0, testTime1;
+ 0464           ;       TEST_QUEUE * pTestQueue;
+ 0464           ; 
+ 0464           ;       // 计算测试时间
+ 0464           ;       testTime0 = sampInfo->testTime0;        // 第一测试时间，如果值为零表示没有此测试
+ 0464 FA01              movw R30,R20
+ 0466 3996              adiw R30,9
+ 0468 2080              ldd R2,z+0
+ 046A 3180              ldd R3,z+1
+ 046C 4424              clr R4
+ 046E 5524              clr R5
+ 0470 2E82              std y+6,R2
+ 0472 3F82              std y+7,R3
+ 0474 4886              std y+8,R4
+ 0476 5986              std y+9,R5
+ 0478           ;       if(testTime0 != 0)
+ 0478 2E80              ldd R2,y+6
+ 047A 3F80              ldd R3,y+7
+ 047C 4884              ldd R4,y+8
+ 047E 5984              ldd R5,y+9
+ 0480 8894              clc
+ 0482 2220              tst R2
+ 0484 3204              cpc R3,R2
+ 0486 4204              cpc R4,R2
+ 0488 5204              cpc R5,R2
+ 048A A1F0              breq L65
+ 048C           X24:
+ 048C           ; 		testTime0 += SecondCount;
+ 048C 40900200          lds R4,_SecondCount+2
+ 0490 50900300          lds R5,_SecondCount+2+1
+ 0494 20900000          lds R2,_SecondCount
+ 0498 30900100          lds R3,_SecondCount+1
+ 049C 6E80              ldd R6,y+6
+ 049E 7F80              ldd R7,y+7
+ 04A0 8884              ldd R8,y+8
+ 04A2 9984              ldd R9,y+9
+ 04A4 620C              add R6,R2
+ 04A6 731C              adc R7,R3
+ 04A8 841C              adc R8,R4
+ 04AA 951C              adc R9,R5
+ 04AC 6E82              std y+6,R6
+ 04AE 7F82              std y+7,R7
+ 04B0 8886              std y+8,R8
+ 04B2 9986              std y+9,R9
+ 04B4           L65:
+ 04B4           ; 	testTime1 = sampInfo->testTime1;	// 第二测试时间，如果值为零表示没有此测试
+ 04B4 FA01              movw R30,R20
+ 04B6 3B96              adiw R30,11
+ 04B8 2080              ldd R2,z+0
+ 04BA 3180              ldd R3,z+1
+ 04BC 4424              clr R4
+ 04BE 5524              clr R5
+ 04C0 2A86              std y+10,R2
+ 04C2 3B86              std y+11,R3
+ 04C4 4C86              std y+12,R4
+ 04C6 5D86              std y+13,R5
+ 04C8           ;       if(testTime1 != 0)
+ 04C8 2A84              ldd R2,y+10
+ 04CA 3B84              ldd R3,y+11
+ 04CC 4C84              ldd R4,y+12
+ 04CE 5D84              ldd R5,y+13
+ 04D0 8894              clc
+ 04D2 2220              tst R2
+ 04D4 3204              cpc R3,R2
+ 04D6 4204              cpc R4,R2
+ 04D8 5204              cpc R5,R2
+ 04DA A1F0              breq L67
+ 04DC           X25:
+ 04DC           ; 		testTime1 += SecondCount;
+ 04DC 40900200          lds R4,_SecondCount+2
+ 04E0 50900300          lds R5,_SecondCount+2+1
+ 04E4 20900000          lds R2,_SecondCount
+ 04E8 30900100          lds R3,_SecondCount+1
+ 04EC 6A84              ldd R6,y+10
+ 04EE 7B84              ldd R7,y+11
+ 04F0 8C84              ldd R8,y+12
+ 04F2 9D84              ldd R9,y+13
+ 04F4 620C              add R6,R2
+ 04F6 731C              adc R7,R3
+ 04F8 841C              adc R8,R4
+ 04FA 951C              adc R9,R5
+ 04FC 6A86              std y+10,R6
+ 04FE 7B86              std y+11,R7
+ 0500 8C86              std y+12,R8
+ 0502 9D86              std y+13,R9
+ 0504           L67:
+ 0504           ; 	
+ 0504           ; 	// 根据测试方法选则对应的测试队列
+ 0504           ; 	if(sampInfo->readType == 0)
+ 0504 FA01              movw R30,R20
+ 0506 2084              ldd R2,z+8
+ 0508 2220              tst R2
+ 050A 19F4              brne L69
+ 050C           X26:
+ 050C           ; 		pTestQueue = &TestQueueA;
+ 050C 40E0              ldi R20,<_TestQueueA
+ 050E 50E0              ldi R21,>_TestQueueA
+ 0510 02C0              xjmp L70
+ 0512           L69:
+ 0512           ; 	else
+ 0512           ; 		pTestQueue = &TestQueueB;
+ 0512 40E0              ldi R20,<_TestQueueB
+ 0514 50E0              ldi R21,>_TestQueueB
+ 0516           L70:
+ 0516           ; 	
+ 0516           ; 	inst0 = 0;
+ 0516 CC24              clr R12
+ 0518           ;       inst1 = 0;
+ 0518 6627              clr R22
+ 051A           ;       // 测试队列插入位置计算
+ 051A           ;       if(testTime0)
+ 051A 2E80              ldd R2,y+6
+ 051C 3F80              ldd R3,y+7
+ 051E 4884              ldd R4,y+8
+ 0520 5984              ldd R5,y+9
+ 0522 8894              clc
+ 0524 2220              tst R2
+ 0526 3204              cpc R3,R2
+ 0528 4204              cpc R4,R2
+ 052A 5204              cpc R5,R2
+ 052C 31F0              breq L71
+ 052E           X27:
+ 052E           ; 		inst0 = TestQueueInsertCalculate(pTestQueue,testTime0);
+ 052E 4882              std y+0,R4
+ 0530 5982              std y+1,R5
+ 0532 9101              movw R18,R2
+ 0534 8A01              movw R16,R20
+ 0536 98DE              xcall _TestQueueInsertCalculate
+ 0538 C02E              mov R12,R16
+ 053A           L71:
+ 053A           ; 	if(testTime1)
+ 053A 2A84              ldd R2,y+10
+ 053C 3B84              ldd R3,y+11
+ 053E 4C84              ldd R4,y+12
+ 0540 5D84              ldd R5,y+13
+ 0542 8894              clc
+ 0544 2220              tst R2
+ 0546 3204              cpc R3,R2
+ 0548 4204              cpc R4,R2
+ 054A 5204              cpc R5,R2
+ 054C 31F0              breq L73
+ 054E           X28:
+ 054E           ; 		inst1 = TestQueueInsertCalculate(pTestQueue,testTime1);
+ 054E 4882              std y+0,R4
+ 0550 5982              std y+1,R5
+ 0552 9101              movw R18,R2
+ 0554 8A01              movw R16,R20
+ 0556 88DE              xcall _TestQueueInsertCalculate
+ 0558 602F              mov R22,R16
+ 055A           L73:
+ 055A           ; 	if(inst0 != 0xff && inst1 != 0xff){		// 如果有两个测试时间，则必需要两个测试都插入成功才可以插入本次测试到测试队列
+ 055A 8C2D              mov R24,R12
+ 055C 8F3F              cpi R24,255
+ 055E 41F1              breq L75
+ 0560           X29:
+ 0560 6F3F              cpi R22,255
+ 0562 31F1              breq L75
+ 0564           X30:
+ 0564           ; 		// 测试插入计算成功，开始插入
+ 0564           ; 		if(testTime0)
+ 0564 2E80              ldd R2,y+6
+ 0566 3F80              ldd R3,y+7
+ 0568 4884              ldd R4,y+8
+ 056A 5984              ldd R5,y+9
+ 056C 8894              clc
+ 056E 2220              tst R2
+ 0570 3204              cpc R3,R2
+ 0572 4204              cpc R4,R2
+ 0574 5204              cpc R5,R2
+ 0576 41F0              breq L77
+ 0578           X31:
+ 0578           ; 			TestQueueInsert(pTestQueue,inst0,ringNum,testTime0);
+ 0578 2A82              std y+2,R2
+ 057A 3B82              std y+3,R3
+ 057C 4C82              std y+4,R4
+ 057E 5D82              std y+5,R5
+ 0580 A882              std y+0,R10
+ 0582 282F              mov R18,R24
+ 0584 8A01              movw R16,R20
+ 0586 D7DE              xcall _TestQueueInsert
+ 0588           L77:
+ 0588           ; 		if(testTime1)
+ 0588 2A84              ldd R2,y+10
+ 058A 3B84              ldd R3,y+11
+ 058C 4C84              ldd R4,y+12
+ 058E 5D84              ldd R5,y+13
+ 0590 8894              clc
+ 0592 2220              tst R2
+ 0594 3204              cpc R3,R2
+ 0596 4204              cpc R4,R2
+ 0598 5204              cpc R5,R2
+ 059A 41F0              breq L79
+ 059C           X32:
+ 059C           ; 			TestQueueInsert(pTestQueue,inst1,ringNum,testTime1);
+ 059C 2A82              std y+2,R2
+ 059E 3B82              std y+3,R3
+ 05A0 4C82              std y+4,R4
+ 05A2 5D82              std y+5,R5
+ 05A4 A882              std y+0,R10
+ 05A6 262F              mov R18,R22
+ 05A8 8A01              movw R16,R20
+ 05AA C5DE              xcall _TestQueueInsert
+ 05AC           L79:
+ 05AC           ; 		// 同时计算卸片时间并放入卸片队列
+ 05AC           ; 		
+ 05AC           ; 		return 0;
+ 05AC 0027              clr R16
+ 05AE 01C0              xjmp L64
+ 05B0           L75:
+ 05B0           ; 		}
+ 05B0           ; 	else{
+ 05B0           ; 		return 0xff;
+ 05B0 0FEF              ldi R16,255
+ 05B2           L64:
+ 05B2                   .dbline 0 ; func end
+ 05B2 2E96              adiw R28,14
+ 05B4 0C940000          xjmp pop_xgsetF03C
+                        .even
+ 05B8           _printf_TestProcess_StepState::
+ 05B8 2297              sbiw R28,2
+ 05BA           ;               }
+ 05BA           ; }
+ 05BA           ; 
+ 05BA           ; static unsigned char TestAProcess_workStep,TestAProcess_mainStep;
+ 05BA           ; static unsigned char TestBProcess_workStep,TestBProcess_mainStep;
+ 05BA           ; 
+ 05BA           ; void printf_TestProcess_StepState(void)
+ 05BA           ; {
+ 05BA           ;       uart_Printf("*3204 TestAStepState $%2d $%2d\r\n",TestAProcess_mainStep,TestAProcess_workStep);
+ 05BA 20901200          lds R2,_TestAProcess_workStep
+ 05BE 3324              clr R3
+ 05C0 3982              std y+1,R3
+ 05C2 2882              std y+0,R2
+ 05C4 20911100          lds R18,_TestAProcess_mainStep
+ 05C8 3327              clr R19
+ 05CA 00E0              ldi R16,<L82
+ 05CC 10E0              ldi R17,>L82
+ 05CE 0E940000          xcall _uart_Printf
+ 05D2           ;       uart_Printf("*3205 TestBStepState $%2d $%2d\r\n",TestBProcess_mainStep,TestBProcess_workStep);
+ 05D2 20901000          lds R2,_TestBProcess_workStep
+ 05D6 3324              clr R3
+ 05D8 3982              std y+1,R3
+ 05DA 2882              std y+0,R2
+ 05DC 20910F00          lds R18,_TestBProcess_mainStep
+ 05E0 3327              clr R19
+ 05E2 00E0              ldi R16,<L83
+ 05E4 10E0              ldi R17,>L83
+ 05E6 0E940000          xcall _uart_Printf
+ 05EA           L81:
+ 05EA                   .dbline 0 ; func end
+ 05EA 2296              adiw R28,2
+ 05EC 0895              ret
+                        .area bss(ram, con, rel)
+ 0000           L85:
+ 0000                   .blkb 1
+ 0001           L86:
+ 0001                   .blkb 1
+ 0002           L87:
+ 0002                   .blkb 1
+ 0003           L88:
+ 0003                   .blkb 1
+ 0004           L89:
+ 0004                   .blkb 1
+ 0005           L90:
+ 0005                   .blkb 1
+ 0006           L91:
+ 0006                   .blkb 1
+                        .area text(rom, con, rel)
+                ;              i -> <dead>
+                ;              j -> R10,R11
+                ;          ucTmp -> R10
+                ;              l -> y+4
+                        .even
+ 05EE           _TestAQueueProcess::
+ 05EE 0E940000          xcall push_xgsetF00C
+ 05F2 2897              sbiw R28,8
+ 05F4           ; }
+ 05F4           ; 
+ 05F4           ; extern unsigned char _TestAMainStep, _TestAWorkStep;
+ 05F4           ; unsigned char ReReadFlag;             // 重新读取标记，在测试周期将此变量赋值将重新运行转盘和读数
+ 05F4           ; unsigned char TestAQueueProcess(void){
+ 05F4           ;       // 监测测试队列上的测试时间，将到时间的测试任务启动
+ 05F4           ;       static unsigned char mainStep;          
+ 05F4           ;       static unsigned char workStep;
+ 05F4           ;       static unsigned char inWork;
+ 05F4           ;       static unsigned char ringNum;
+ 05F4           ;       static unsigned char watiMotTurnplate, waitMotLifter;
+ 05F4           ;       static unsigned char ReTestCnt;                         // 重复读取计数
+ 05F4           ;       unsigned char ucTmp;
+ 05F4           ;       unsigned int i,j;
+ 05F4           ;       unsigned long l;
+ 05F4           ;       
+ 05F4           ;       TestAProcess_mainStep = mainStep;
+ 05F4 20900000          lds R2,L85
+ 05F8 20921100          sts _TestAProcess_mainStep,R2
+ 05FC           ;       TestAProcess_workStep = workStep;
+ 05FC 20900100          lds R2,L86
+ 0600 20921200          sts _TestAProcess_workStep,R2
+ 0604           ;       
+ 0604           ;       if(inWork){
+ 0604 20900200          lds R2,L87
+ 0608 2220              tst R2
+ 060A 09F4              brne X62
+ 060C 44C0              xjmp L92
+ 060E           X62:
+ 060E           X33:
+ 060E           ; 		if(WaitDelayTime(MOT_TURN_PLATE))
+ 060E 01E0              ldi R16,1
+ 0610 0E940000          xcall _WaitDelayTime
+ 0614 0023              tst R16
+ 0616 89F1              breq L94
+ 0618           X34:
+ 0618           ; 		{
+ 0618           ; 			if(mainStep == 5)	// 测试期间
+ 0618 80910000          lds R24,L85
+ 061C 8530              cpi R24,5
+ 061E 59F5              brne L96
+ 0620           X35:
+ 0620           ; 			{
+ 0620           ; 				if(ReReadFlag == 1)	// 重新测试标记
+ 0620 80910E00          lds R24,_ReReadFlag
+ 0624 8130              cpi R24,1
+ 0626 D9F4              brne L98
+ 0628           X36:
+ 0628           ; 				{
+ 0628           ; 					ReTestCnt++;
+ 0628 80910600          lds R24,L91
+ 062C 8F5F              subi R24,255    ; addi 1
+ 062E 80930600          sts L91,R24
+ 0632           ;                                       if(ReTestCnt == 1)
+ 0632 8130              cpi R24,1
+ 0634 71F4              brne L100
+ 0636           X37:
+ 0636           ; 					{
+ 0636           ; 						MotRunToSite(MOT_TURN_PLATE,TestQueueA.ringNum[0]);		// 转盘转动
+ 0636 2091DF00          lds R18,_TestQueueA
+ 063A 01E0              ldi R16,1
+ 063C 0E940000          xcall _MotRunToSite
+ 0640           ;                                               ReReadFlag = 0;         // 执行完后清除重测标识
+ 0640 2224              clr R2
+ 0642 20920E00          sts _ReReadFlag,R2
+ 0646           ;                                               watiMotTurnplate = 1;
+ 0646 81E0              ldi R24,1
+ 0648 80930400          sts L89,R24
+ 064C           ;                                               mainStep = 1;
+ 064C 80930000          sts L85,R24
+ 0650           ;                                       }
+ 0650 06C0              xjmp L101
+ 0652           L100:
+ 0652           ; 					else
+ 0652           ; 					{
+ 0652           ; 						ReReadFlag = 0;		// 执行完后清除重测标识
+ 0652 2224              clr R2
+ 0654 20920E00          sts _ReReadFlag,R2
+ 0658           ;                                               mainStep = 21;
+ 0658 85E1              ldi R24,21
+ 065A 80930000          sts L85,R24
+ 065E           ;                                       }
+ 065E           L101:
+ 065E           ; 				}
+ 065E           L98:
+ 065E           ; 				if(ReadColseAnswer)		// 接收到检测完成应答信号，关闭检测
+ 065E 20901300          lds R2,_ReadColseAnswer
+ 0662 2220              tst R2
+ 0664 41F0              breq L102
+ 0666           X38:
+ 0666           ; 				{
+ 0666           ; 					SetDelayTime(MOT_TURN_PLATE, 5);
+ 0666 25E0              ldi R18,5
+ 0668 30E0              ldi R19,0
+ 066A 01E0              ldi R16,1
+ 066C 0E940000          xcall _SetDelayTime
+ 0670           ;                                       ReadColseAnswer = 0;
+ 0670 2224              clr R2
+ 0672 20921300          sts _ReadColseAnswer,R2
+ 0676           ;                               }
+ 0676           L102:
+ 0676           ; 			}
+ 0676           L96:
+ 0676           ; 			return 0;
+ 0676 0027              clr R16
+ 0678 5CC2              xjmp L84
+ 067A           L94:
+ 067A           ; 			}
+ 067A           ; 		if(watiMotTurnplate){	if(GetMotState(MOT_TURN_PLATE)!=STA_SLAVE_FREE)	return 0;	watiMotTurnplate = 0;	}
+ 067A 20900400          lds R2,L89
+ 067E 2220              tst R2
+ 0680 51F0              breq L104
+ 0682           X39:
+ 0682 01E0              ldi R16,1
+ 0684 0E940000          xcall _GetMotState
+ 0688 0130              cpi R16,1
+ 068A 11F0              breq L106
+ 068C           X40:
+ 068C 0027              clr R16
+ 068E 51C2              xjmp L84
+ 0690           L106:
+ 0690 2224              clr R2
+ 0692 20920400          sts L89,R2
+ 0696           L104:
+ 0696           ; 		}
+ 0696           L92:
+ 0696           ; 	switch(mainStep){
+ 0696 A0900000          lds R10,L85
+ 069A BB24              clr R11
+ 069C AA20              tst R10
+ 069E 19F4              brne X41
+ 06A0 BB20              tst R11
+ 06A2 09F4              brne X63
+ 06A4 35C0              xjmp L111
+ 06A6           X63:
+ 06A6           X41:
+ 06A6 C501              movw R24,R10
+ 06A8 8130              cpi R24,1
+ 06AA E0E0              ldi R30,0
+ 06AC 9E07              cpc R25,R30
+ 06AE 09F4              brne X64
+ 06B0 C8C0              xjmp L127
+ 06B2           X64:
+ 06B2           X42:
+ 06B2 8230              cpi R24,2
+ 06B4 E0E0              ldi R30,0
+ 06B6 9E07              cpc R25,R30
+ 06B8 09F4              brne X65
+ 06BA 05C1              xjmp L133
+ 06BC           X65:
+ 06BC           X43:
+ 06BC 8330              cpi R24,3
+ 06BE E0E0              ldi R30,0
+ 06C0 9E07              cpc R25,R30
+ 06C2 09F4              brne X66
+ 06C4 11C1              xjmp L134
+ 06C6           X66:
+ 06C6           X44:
+ 06C6 8430              cpi R24,4
+ 06C8 E0E0              ldi R30,0
+ 06CA 9E07              cpc R25,R30
+ 06CC 09F4              brne X67
+ 06CE 2DC1              xjmp L137
+ 06D0           X67:
+ 06D0           X45:
+ 06D0 8530              cpi R24,5
+ 06D2 E0E0              ldi R30,0
+ 06D4 9E07              cpc R25,R30
+ 06D6 09F4              brne X68
+ 06D8 AAC1              xjmp L146
+ 06DA           X68:
+ 06DA           X46:
+ 06DA 8630              cpi R24,6
+ 06DC E0E0              ldi R30,0
+ 06DE 9E07              cpc R25,R30
+ 06E0 09F4              brne X69
+ 06E2 1BC2              xjmp L153
+ 06E4           X69:
+ 06E4           X47:
+ 06E4 8A30              cpi R24,10
+ 06E6 E0E0              ldi R30,0
+ 06E8 9E07              cpc R25,R30
+ 06EA 09F4              brne X70
+ 06EC 8EC0              xjmp L125
+ 06EE           X70:
+ 06EE           X48:
+ 06EE 8B30              cpi R24,11
+ 06F0 E0E0              ldi R30,0
+ 06F2 9E07              cpc R25,R30
+ 06F4 09F4              brne X71
+ 06F6 9CC0              xjmp L126
+ 06F8           X71:
+ 06F8           X49:
+ 06F8 8030              cpi R24,0
+ 06FA E0E0              ldi R30,0
+ 06FC 9E07              cpc R25,R30
+ 06FE 0CF4              brge X72
+ 0700 17C2              xjmp L108
+ 0702           X72:
+ 0702           X50:
+ 0702           L154:
+ 0702 C501              movw R24,R10
+ 0704 8531              cpi R24,21
+ 0706 E0E0              ldi R30,0
+ 0708 9E07              cpc R25,R30
+ 070A 09F4              brne X73
+ 070C D9C1              xjmp L151
+ 070E           X73:
+ 070E           X51:
+ 070E 10C2              xjmp L108
+ 0710           L111:
+ 0710           ; 		case 0:		// 监测队头的测试时间
+ 0710           ; 			if(TestQueueA.ringNum[0] == 0xff)
+ 0710 8091DF00          lds R24,_TestQueueA
+ 0714 8F3F              cpi R24,255
+ 0716 11F4              brne L112
+ 0718           X52:
+ 0718           ; 			{
+ 0718           ; 		//		if(LampAState != 0)		// 无测试任务,关闭测试光源
+ 0718           ; 		//			TestALampClose();
+ 0718           ; 				return 1;	// 无测试任务
+ 0718 01E0              ldi R16,1
+ 071A 0BC2              xjmp L84
+ 071C           L112:
+ 071C           ; 			}
+ 071C           ; 			else
+ 071C           ; 			{
+ 071C           ; 		//		if(LampAState == 0)		// 有测试任务,开启光源
+ 071C           ; 		//			TestALampOpen();
+ 071C           ; 			}
+ 071C           ; 			if(TestQueueA.testTime[0] != 0)
+ 071C 40900901          lds R4,_TestQueueA+40+2
+ 0720 50900A01          lds R5,_TestQueueA+40+2+1
+ 0724 20900701          lds R2,_TestQueueA+40
+ 0728 30900801          lds R3,_TestQueueA+40+1
+ 072C 8894              clc
+ 072E 2220              tst R2
+ 0730 3204              cpc R3,R2
+ 0732 4204              cpc R4,R2
+ 0734 5204              cpc R5,R2
+ 0736 09F4              brne X74
+ 0738 FBC1              xjmp L109
+ 073A           X74:
+ 073A           X53:
+ 073A           ; 			{
+ 073A           ; 				ringNum = TestQueueA.ringNum[0];
+ 073A 2090DF00          lds R2,_TestQueueA
+ 073E 20920300          sts L88,R2
+ 0742           ;                               if(SecondCount > (TestQueueA.testTime[0]-10))
+ 0742 4AE0              ldi R20,10
+ 0744 50E0              ldi R21,0
+ 0746 60E0              ldi R22,0
+ 0748 70E0              ldi R23,0
+ 074A 40900901          lds R4,_TestQueueA+40+2
+ 074E 50900A01          lds R5,_TestQueueA+40+2+1
+ 0752 20900701          lds R2,_TestQueueA+40
+ 0756 30900801          lds R3,_TestQueueA+40+1
+ 075A 241A              sub R2,R20
+ 075C 350A              sbc R3,R21
+ 075E 460A              sbc R4,R22
+ 0760 570A              sbc R5,R23
+ 0762 80900200          lds R8,_SecondCount+2
+ 0766 90900300          lds R9,_SecondCount+2+1
+ 076A 60900000          lds R6,_SecondCount
+ 076E 70900100          lds R7,_SecondCount+1
+ 0772 2614              cp R2,R6
+ 0774 3704              cpc R3,R7
+ 0776 4804              cpc R4,R8
+ 0778 5904              cpc R5,R9
+ 077A 08F0              brlo X75
+ 077C D9C1              xjmp L109
+ 077E           X75:
+ 077E           X54:
+ 077E           ; 				{
+ 077E           ; 					// 测试时间到
+ 077E           ; 					if(TurnPlateUsedLock == 0)
+ 077E 20900000          lds R2,_TurnPlateUsedLock
+ 0782 2220              tst R2
+ 0784 09F0              breq X76
+ 0786 D4C1              xjmp L109
+ 0788           X76:
+ 0788           X55:
+ 0788           ; 					{
+ 0788           ; 						if(255 == insertflag[ringNum])
+ 0788 80E0              ldi R24,<_insertflag
+ 078A 90E0              ldi R25,>_insertflag
+ 078C E0910300          lds R30,L88
+ 0790 FF27              clr R31
+ 0792 E80F              add R30,R24
+ 0794 F91F              adc R31,R25
+ 0796 8081              ldd R24,z+0
+ 0798 8F3F              cpi R24,255
+ 079A 09F0              breq X77
+ 079C C9C1              xjmp L109
+ 079E           X77:
+ 079E           X56:
+ 079E           ; 						{
+ 079E           ; 							insertflag[ringNum] = 200;
+ 079E 80E0              ldi R24,<_insertflag
+ 07A0 90E0              ldi R25,>_insertflag
+ 07A2 E0910300          lds R30,L88
+ 07A6 FF27              clr R31
+ 07A8 E80F              add R30,R24
+ 07AA F91F              adc R31,R25
+ 07AC 88EC              ldi R24,200
+ 07AE 8083              std z+0,R24
+ 07B0           ;                                                       Uart0ReUnable;
+ 07B0 8091C100          lds R24,193
+ 07B4 8F7E              andi R24,239
+ 07B6 8093C100          sts 193,R24
+ 07BA           ;                                                       uart_Printf("%s $%4d $%4d\r\n",strM3122,ringNum,insertflag[ringNum]);
+ 07BA A0900300          lds R10,L88
+ 07BE 80E0              ldi R24,<_insertflag
+ 07C0 90E0              ldi R25,>_insertflag
+ 07C2 EA2D              mov R30,R10
+ 07C4 FF27              clr R31
+ 07C6 E80F              add R30,R24
+ 07C8 F91F              adc R31,R25
+ 07CA 2080              ldd R2,z+0
+ 07CC 3324              clr R3
+ 07CE 3B82              std y+3,R3
+ 07D0 2A82              std y+2,R2
+ 07D2 2A2C              mov R2,R10
+ 07D4 3324              clr R3
+ 07D6 3982              std y+1,R3
+ 07D8 2882              std y+0,R2
+ 07DA 20E0              ldi R18,<_strM3122
+ 07DC 30E0              ldi R19,>_strM3122
+ 07DE 00E0              ldi R16,<L124
+ 07E0 10E0              ldi R17,>L124
+ 07E2 0E940000          xcall _uart_Printf
+ 07E6           ;                                                       Uart0ReEnable;
+ 07E6 8091C100          lds R24,193
+ 07EA 8061              ori R24,16
+ 07EC 8093C100          sts 193,R24
+ 07F0           ;                                                       TurnPlateUsedLock = 1;          // 占用转盘标识
+ 07F0 81E0              ldi R24,1
+ 07F2 80930000          sts _TurnPlateUsedLock,R24
+ 07F6           ;                                                       //mainStep = 1;
+ 07F6           ;                                                       mainStep = 10;
+ 07F6 8AE0              ldi R24,10
+ 07F8 80930000          sts L85,R24
+ 07FC           ;                                                       workStep = 0;
+ 07FC 2224              clr R2
+ 07FE 20920100          sts L86,R2
+ 0802           ;                                                       inWork = 1; 
+ 0802 81E0              ldi R24,1
+ 0804 80930200          sts L87,R24
+ 0808           ;                                               }
+ 0808           ;                                       }
+ 0808           ;                               }
+ 0808           ;                       }
+ 0808           ;                       break;
+ 0808 93C1              xjmp L109
+ 080A           L125:
+ 080A           ; 		case 10:
+ 080A           ; 			SetMotRunPam(MOT_TURN_PLATE,200,20,CURRENT_TURN_PLATE);// 140,2
+ 080A 81E0              ldi R24,1
+ 080C 8A83              std y+2,R24
+ 080E 84E1              ldi R24,20
+ 0810 8883              std y+0,R24
+ 0812 28EC              ldi R18,200
+ 0814 01E0              ldi R16,1
+ 0816 0E940000          xcall _SetMotRunPam
+ 081A           ;                       MotRunToSite(MOT_TURN_PLATE,0);         // 转盘转到零位 
+ 081A 2227              clr R18
+ 081C 01E0              ldi R16,1
+ 081E 0E940000          xcall _MotRunToSite
+ 0822           ;                       watiMotTurnplate = 1;
+ 0822 81E0              ldi R24,1
+ 0824 80930400          sts L89,R24
+ 0828           ;                       mainStep = 11;
+ 0828 8BE0              ldi R24,11
+ 082A 80930000          sts L85,R24
+ 082E           ;                       break;
+ 082E 80C1              xjmp L109
+ 0830           L126:
+ 0830           ; 		case 11:
+ 0830           ; 			SetDelayTime(MOT_TURN_PLATE,2);
+ 0830 22E0              ldi R18,2
+ 0832 30E0              ldi R19,0
+ 0834 01E0              ldi R16,1
+ 0836 0E940000          xcall _SetDelayTime
+ 083A           ;                       mainStep = 1;
+ 083A 81E0              ldi R24,1
+ 083C 80930000          sts L85,R24
+ 0840           ;                       break;
+ 0840 77C1              xjmp L109
+ 0842           L127:
+ 0842           ; 		case 1:		// 转盘转到当前位置
+ 0842           ; 		//	ringNum = TestQueueA.ringNum[0];
+ 0842           ; 			ucTmp = ringNum + 11;
+ 0842 80910300          lds R24,L88
+ 0846 855F              subi R24,245    ; addi 11
+ 0848 A82E              mov R10,R24
+ 084A           ; #ifndef UartSendLong
+ 084A           ;                       Uart0ReUnable;
+ 084A           ;                       uart_Printf("%s $%8d",strM3148,RingQueue.sampInfo[ringNum].testSerial);//2016-05-17
+ 084A           ; #else
+ 084A           ;                       Uart0ReUnable;
+ 084A 8091C100          lds R24,193
+ 084E 8F7E              andi R24,239
+ 0850 8093C100          sts 193,R24
+ 0854           ;                       uart_Printf("%s $ ",strM3148);
+ 0854 20E0              ldi R18,<_strM3148
+ 0856 30E0              ldi R19,>_strM3148
+ 0858 00E0              ldi R16,<L128
+ 085A 10E0              ldi R17,>L128
+ 085C 0E940000          xcall _uart_Printf
+ 0860           ;                       uart0SendInt(RingQueue.sampInfo[ringNum].testSerial);
+ 0860 10910300          lds R17,L88
+ 0864 0DE0              ldi R16,13
+ 0866 0103              mulsu R16,R17
+ 0868 80E0              ldi R24,<_RingQueue+1
+ 086A 90E0              ldi R25,>_RingQueue+1
+ 086C F001              movw R30,R0
+ 086E E80F              add R30,R24
+ 0870 F91F              adc R31,R25
+ 0872 0081              ldd R16,z+0
+ 0874 1181              ldd R17,z+1
+ 0876 2281              ldd R18,z+2
+ 0878 3381              ldd R19,z+3
+ 087A 0E940000          xcall _uart0SendInt
+ 087E           ; #endif
+ 087E           ;                       uart_Printf(" $%4d\r\n",ringNum);//2016-05-17
+ 087E 20910300          lds R18,L88
+ 0882 3327              clr R19
+ 0884 00E0              ldi R16,<L130
+ 0886 10E0              ldi R17,>L130
+ 0888 0E940000          xcall _uart_Printf
+ 088C           ;                       Uart0ReUnable;
+ 088C 8091C100          lds R24,193
+ 0890 8F7E              andi R24,239
+ 0892 8093C100          sts 193,R24
+ 0896           ;                       if(ucTmp>=RING_QUEUE_NUM)
+ 0896 8A2D              mov R24,R10
+ 0898 8E31              cpi R24,30
+ 089A 10F0              brlo L131
+ 089C           X57:
+ 089C           ; 				ucTmp -= RING_QUEUE_NUM;
+ 089C 8E51              subi R24,30
+ 089E A82E              mov R10,R24
+ 08A0           L131:
+ 08A0           ; 			SetMotRunPam(MOT_TURN_PLATE,200,20,CURRENT_TURN_PLATE);// 140,2
+ 08A0 81E0              ldi R24,1
+ 08A2 8A83              std y+2,R24
+ 08A4 84E1              ldi R24,20
+ 08A6 8883              std y+0,R24
+ 08A8 28EC              ldi R18,200
+ 08AA 01E0              ldi R16,1
+ 08AC 0E940000          xcall _SetMotRunPam
+ 08B0           ;                       MotRunToSite(MOT_TURN_PLATE,ucTmp);             // 转盘转到当前位置                     
+ 08B0 2A2D              mov R18,R10
+ 08B2 01E0              ldi R16,1
+ 08B4 0E940000          xcall _MotRunToSite
+ 08B8           ;                       watiMotTurnplate = 1;
+ 08B8 81E0              ldi R24,1
+ 08BA 80930400          sts L89,R24
+ 08BE           ;                       mainStep = 2;
+ 08BE 82E0              ldi R24,2
+ 08C0 80930000          sts L85,R24
+ 08C4           ;                       break;
+ 08C4 35C1              xjmp L109
+ 08C6           L133:
+ 08C6           ; 		case 2:
+ 08C6           ; 			MotRun(MOT_TURN_PLATE, 100);	// 20
+ 08C6 24E6              ldi R18,100
+ 08C8 30E0              ldi R19,0
+ 08CA 01E0              ldi R16,1
+ 08CC 0E940000          xcall _MotRun
+ 08D0           ;                       watiMotTurnplate = 1;
+ 08D0 81E0              ldi R24,1
+ 08D2 80930400          sts L89,R24
+ 08D6           ;                       SetDelayTime(MOT_TURN_PLATE, 5);
+ 08D6 25E0              ldi R18,5
+ 08D8 30E0              ldi R19,0
+ 08DA 01E0              ldi R16,1
+ 08DC 0E940000          xcall _SetDelayTime
+ 08E0           ;                       mainStep = 3;
+ 08E0 83E0              ldi R24,3
+ 08E2 80930000          sts L85,R24
+ 08E6           ;                       break;
+ 08E6 24C1              xjmp L109
+ 08E8           L134:
+ 08E8           ; 		case 3:
+ 08E8           ; 			//MotRun(MOT_TURN_PLATE, -120);	// 20
+ 08E8           ; 			//2016-06-16 回来的少走一点，速度变慢
+ 08E8           ; 			SetMotRunPam(MOT_TURN_PLATE,140,20,CURRENT_TURN_PLATE);// 140,2
+ 08E8 81E0              ldi R24,1
+ 08EA 8A83              std y+2,R24
+ 08EC 84E1              ldi R24,20
+ 08EE 8883              std y+0,R24
+ 08F0 2CE8              ldi R18,140
+ 08F2 01E0              ldi R16,1
+ 08F4 0E940000          xcall _SetMotRunPam
+ 08F8           ;                       MotRun(MOT_TURN_PLATE, -110);   // 20
+ 08F8 22E9              ldi R18,-110
+ 08FA 3FEF              ldi R19,-1
+ 08FC 01E0              ldi R16,1
+ 08FE 0E940000          xcall _MotRun
+ 0902           ;                       ////////////////////////////////////////
+ 0902           ;                       watiMotTurnplate = 1;
+ 0902 81E0              ldi R24,1
+ 0904 80930400          sts L89,R24
+ 0908           ;                       SetDelayTime(MOT_TURN_PLATE, 10);
+ 0908 2AE0              ldi R18,10
+ 090A 30E0              ldi R19,0
+ 090C 01E0              ldi R16,1
+ 090E 0E940000          xcall _SetDelayTime
+ 0912           ;                       ReReadFlag = 0; // 重测标识初始化
+ 0912 2224              clr R2
+ 0914 20920E00          sts _ReReadFlag,R2
+ 0918           ;                       if(LampAState == 0)
+ 0918 20901500          lds R2,_LampAState
+ 091C 2220              tst R2
+ 091E 09F4              brne L135
+ 0920           X58:
+ 0920           ; 				TestALampOpen();
+ 0920 6FDB              xcall _TestALampOpen
+ 0922           L135:
+ 0922           ; 			mainStep = 4;
+ 0922 84E0              ldi R24,4
+ 0924 80930000          sts L85,R24
+ 0928           ;                       break;
+ 0928 03C1              xjmp L109
+ 092A           L137:
+ 092A           ; 		case 4:		// 开始检测
+ 092A           ; 			if(SecondCount < (TestQueueA.testTime[0]))
+ 092A 40900901          lds R4,_TestQueueA+40+2
+ 092E 50900A01          lds R5,_TestQueueA+40+2+1
+ 0932 20900701          lds R2,_TestQueueA+40
+ 0936 30900801          lds R3,_TestQueueA+40+1
+ 093A 80900200          lds R8,_SecondCount+2
+ 093E 90900300          lds R9,_SecondCount+2+1
+ 0942 60900000          lds R6,_SecondCount
+ 0946 70900100          lds R7,_SecondCount+1
+ 094A 6214              cp R6,R2
+ 094C 7304              cpc R7,R3
+ 094E 8404              cpc R8,R4
+ 0950 9504              cpc R9,R5
+ 0952 08F4              brsh L138
+ 0954           X59:
+ 0954           ; 				break;
+ 0954 EDC0              xjmp L109
+ 0956           L138:
+ 0956           ; 			ringNum = TestQueueA.ringNum[0];
+ 0956 2090DF00          lds R2,_TestQueueA
+ 095A 20920300          sts L88,R2
+ 095E           ;                       // 开启检测光源
+ 095E           ;               //      TestALampOpen();
+ 095E           ;                       l = RingQueue.sampInfo[ringNum].testSerial;
+ 095E 122D              mov R17,R2
+ 0960 0DE0              ldi R16,13
+ 0962 0103              mulsu R16,R17
+ 0964 80E0              ldi R24,<_RingQueue+1
+ 0966 90E0              ldi R25,>_RingQueue+1
+ 0968 F001              movw R30,R0
+ 096A E80F              add R30,R24
+ 096C F91F              adc R31,R25
+ 096E 2080              ldd R2,z+0
+ 0970 3180              ldd R3,z+1
+ 0972 4280              ldd R4,z+2
+ 0974 5380              ldd R5,z+3
+ 0976 2C82              std y+4,R2
+ 0978 3D82              std y+5,R3
+ 097A 4E82              std y+6,R4
+ 097C 5F82              std y+7,R5
+ 097E           ;               //      j = RingQueue.sampInfo[ringNum].testTime0;
+ 097E           ;                       j = RingQueue.sampInfo[ringNum].testTime0+(unsigned int)(SecondCount-(TestQueueA.testTime[0]));
+ 097E 0103              mulsu R16,R17
+ 0980 80E0              ldi R24,<_RingQueue+9
+ 0982 90E0              ldi R25,>_RingQueue+9
+ 0984 F001              movw R30,R0
+ 0986 E80F              add R30,R24
+ 0988 F91F              adc R31,R25
+ 098A A080              ldd R10,z+0
+ 098C B180              ldd R11,z+1
+ 098E 40900901          lds R4,_TestQueueA+40+2
+ 0992 50900A01          lds R5,_TestQueueA+40+2+1
+ 0996 20900701          lds R2,_TestQueueA+40
+ 099A 30900801          lds R3,_TestQueueA+40+1
+ 099E 80900200          lds R8,_SecondCount+2
+ 09A2 90900300          lds R9,_SecondCount+2+1
+ 09A6 60900000          lds R6,_SecondCount
+ 09AA 70900100          lds R7,_SecondCount+1
+ 09AE 6218              sub R6,R2
+ 09B0 7308              sbc R7,R3
+ 09B2 8408              sbc R8,R4
+ 09B4 9508              sbc R9,R5
+ 09B6 A60C              add R10,R6
+ 09B8 B71C              adc R11,R7
+ 09BA           ; #ifndef UartSendLong
+ 09BA           ;                       Uart0ReUnable;
+ 09BA           ;                       uart_Printf("%s $%8d",strM3112, l);
+ 09BA           ;                       uart_Printf(" $%4d $%4d",j, ringNum);
+ 09BA           ;                       uart_Printf(" $%8d\r\n",(unsigned long)SecondCount);
+ 09BA           ;                       Uart0ReUnable;
+ 09BA           ; #else
+ 09BA           ;                       Uart0ReUnable;
+ 09BA 8091C100          lds R24,193
+ 09BE 8F7E              andi R24,239
+ 09C0 8093C100          sts 193,R24
+ 09C4           ;                       uart_Printf("%s $ ",strM3112);
+ 09C4 20E0              ldi R18,<_strM3112
+ 09C6 30E0              ldi R19,>_strM3112
+ 09C8 00E0              ldi R16,<L128
+ 09CA 10E0              ldi R17,>L128
+ 09CC 0E940000          xcall _uart_Printf
+ 09D0           ;                       uart0SendInt(l);
+ 09D0 0C81              ldd R16,y+4
+ 09D2 1D81              ldd R17,y+5
+ 09D4 2E81              ldd R18,y+6
+ 09D6 3F81              ldd R19,y+7
+ 09D8 0E940000          xcall _uart0SendInt
+ 09DC           ;                       uart_Printf(" $%4d $%4d $ ",j, ringNum);
+ 09DC 20900300          lds R2,L88
+ 09E0 3324              clr R3
+ 09E2 3982              std y+1,R3
+ 09E4 2882              std y+0,R2
+ 09E6 9501              movw R18,R10
+ 09E8 00E0              ldi R16,<L144
+ 09EA 10E0              ldi R17,>L144
+ 09EC 0E940000          xcall _uart_Printf
+ 09F0           ;                       uart0SendInt(SecondCount);
+ 09F0 20910200          lds R18,_SecondCount+2
+ 09F4 30910300          lds R19,_SecondCount+2+1
+ 09F8 00910000          lds R16,_SecondCount
+ 09FC 10910100          lds R17,_SecondCount+1
+ 0A00 0E940000          xcall _uart0SendInt
+ 0A04           ;                       uart_Printf("\r\n");
+ 0A04 00E0              ldi R16,<L145
+ 0A06 10E0              ldi R17,>L145
+ 0A08 0E940000          xcall _uart_Printf
+ 0A0C           ;                       Uart0ReUnable;
+ 0A0C 8091C100          lds R24,193
+ 0A10 8F7E              andi R24,239
+ 0A12 8093C100          sts 193,R24
+ 0A16           ; #endif
+ 0A16           ;                       ReadColseAnswer = 0;    // 测试开始初始化关闭信号
+ 0A16 2224              clr R2
+ 0A18 20921300          sts _ReadColseAnswer,R2
+ 0A1C           ;                       SetDelayTime(MOT_TURN_PLATE, 100);      // 读数延迟
+ 0A1C 24E6              ldi R18,100
+ 0A1E 30E0              ldi R19,0
+ 0A20 01E0              ldi R16,1
+ 0A22 0E940000          xcall _SetDelayTime
+ 0A26           ;                       mainStep = 5;
+ 0A26 85E0              ldi R24,5
+ 0A28 80930000          sts L85,R24
+ 0A2C           ;                       break;
+ 0A2C 81C0              xjmp L109
+ 0A2E           L146:
+ 0A2E           ; 		case 5:		// 检测完毕,释放转盘使用权,关闭检测光源
+ 0A2E           ; 			l = RingQueue.sampInfo[ringNum].testSerial;
+ 0A2E 10910300          lds R17,L88
+ 0A32 0DE0              ldi R16,13
+ 0A34 0103              mulsu R16,R17
+ 0A36 80E0              ldi R24,<_RingQueue+1
+ 0A38 90E0              ldi R25,>_RingQueue+1
+ 0A3A F001              movw R30,R0
+ 0A3C E80F              add R30,R24
+ 0A3E F91F              adc R31,R25
+ 0A40 2080              ldd R2,z+0
+ 0A42 3180              ldd R3,z+1
+ 0A44 4280              ldd R4,z+2
+ 0A46 5380              ldd R5,z+3
+ 0A48 2C82              std y+4,R2
+ 0A4A 3D82              std y+5,R3
+ 0A4C 4E82              std y+6,R4
+ 0A4E 5F82              std y+7,R5
+ 0A50           ; #ifndef UartSendLong
+ 0A50           ;                       Uart0ReUnable;
+ 0A50           ;                       uart_Printf("%s $%8d",strM3114, l);
+ 0A50           ;                       uart_Printf(" $%8d\r\n",(unsigned long)SecondCount);
+ 0A50           ;                       Uart0ReEnable;
+ 0A50           ; #else
+ 0A50           ;                       Uart0ReUnable;
+ 0A50 8091C100          lds R24,193
+ 0A54 8F7E              andi R24,239
+ 0A56 8093C100          sts 193,R24
+ 0A5A           ;                       uart_Printf("%s $ ",strM3114);
+ 0A5A 20E0              ldi R18,<_strM3114
+ 0A5C 30E0              ldi R19,>_strM3114
+ 0A5E 00E0              ldi R16,<L128
+ 0A60 10E0              ldi R17,>L128
+ 0A62 0E940000          xcall _uart_Printf
+ 0A66           ;                       uart0SendInt(l);
+ 0A66 0C81              ldd R16,y+4
+ 0A68 1D81              ldd R17,y+5
+ 0A6A 2E81              ldd R18,y+6
+ 0A6C 3F81              ldd R19,y+7
+ 0A6E 0E940000          xcall _uart0SendInt
+ 0A72           ;                       uart_Printf(" $ ");
+ 0A72 00E0              ldi R16,<L148
+ 0A74 10E0              ldi R17,>L148
+ 0A76 0E940000          xcall _uart_Printf
+ 0A7A           ;                       uart0SendInt(SecondCount);
+ 0A7A 20910200          lds R18,_SecondCount+2
+ 0A7E 30910300          lds R19,_SecondCount+2+1
+ 0A82 00910000          lds R16,_SecondCount
+ 0A86 10910100          lds R17,_SecondCount+1
+ 0A8A 0E940000          xcall _uart0SendInt
+ 0A8E           ;                       uart_Printf("\r\n");
+ 0A8E 00E0              ldi R16,<L145
+ 0A90 10E0              ldi R17,>L145
+ 0A92 0E940000          xcall _uart_Printf
+ 0A96           ;                       Uart0ReEnable;
+ 0A96 8091C100          lds R24,193
+ 0A9A 8061              ori R24,16
+ 0A9C 8093C100          sts 193,R24
+ 0AA0           ; #endif
+ 0AA0           ;                       // 关闭检测光源
+ 0AA0           ;                       if(LampAState != 0 && CardNoneUseful == 1)
+ 0AA0 20901500          lds R2,_LampAState
+ 0AA4 2220              tst R2
+ 0AA6 29F0              breq L149
+ 0AA8           X60:
+ 0AA8 80910000          lds R24,_CardNoneUseful
+ 0AAC 8130              cpi R24,1
+ 0AAE 09F4              brne L149
+ 0AB0           X61:
+ 0AB0           ; 				TestALampClose();
+ 0AB0 BADA              xcall _TestALampClose
+ 0AB2           L149:
+ 0AB2           ; 			TestQueueForward(&TestQueueA);		// 删除已完成的队头任务，队列前进一步
+ 0AB2 00E0              ldi R16,<_TestQueueA
+ 0AB4 10E0              ldi R17,>_TestQueueA
+ 0AB6 8EDC              xcall _TestQueueForward
+ 0AB8           ;                       
+ 0AB8           ;               //      MotRunToSite(MOT_TURN_PLATE,0);         // 转盘运行到零位
+ 0AB8           ;               //      SetDelayTime(MOT_TURN_PLATE, 10);
+ 0AB8           ;               //      watiMotTurnplate = 1;
+ 0AB8           ;                       mainStep = 6;
+ 0AB8 86E0              ldi R24,6
+ 0ABA 80930000          sts L85,R24
+ 0ABE           ;                       break;
+ 0ABE 38C0              xjmp L109
+ 0AC0           L151:
+ 0AC0           ; 		
+ 0AC0           ; 			case 21:		// 转盘转到当前位置			 //  20170518pan
+ 0AC0           ; #ifndef UartSendLong	
+ 0AC0           ; 			Uart0ReUnable;
+ 0AC0           ; 			uart_Printf("%s $%8d",strM3148,RingQueue.sampInfo[ringNum].testSerial);//2016-05-17
+ 0AC0           ; #else
+ 0AC0           ; 			Uart0ReUnable;
+ 0AC0 8091C100          lds R24,193
+ 0AC4 8F7E              andi R24,239
+ 0AC6 8093C100          sts 193,R24
+ 0ACA           ;                       uart_Printf("%s $ ",strM3148);
+ 0ACA 20E0              ldi R18,<_strM3148
+ 0ACC 30E0              ldi R19,>_strM3148
+ 0ACE 00E0              ldi R16,<L128
+ 0AD0 10E0              ldi R17,>L128
+ 0AD2 0E940000          xcall _uart_Printf
+ 0AD6           ;                       uart0SendInt(RingQueue.sampInfo[ringNum].testSerial);
+ 0AD6 10910300          lds R17,L88
+ 0ADA 0DE0              ldi R16,13
+ 0ADC 0103              mulsu R16,R17
+ 0ADE 80E0              ldi R24,<_RingQueue+1
+ 0AE0 90E0              ldi R25,>_RingQueue+1
+ 0AE2 F001              movw R30,R0
+ 0AE4 E80F              add R30,R24
+ 0AE6 F91F              adc R31,R25
+ 0AE8 0081              ldd R16,z+0
+ 0AEA 1181              ldd R17,z+1
+ 0AEC 2281              ldd R18,z+2
+ 0AEE 3381              ldd R19,z+3
+ 0AF0 0E940000          xcall _uart0SendInt
+ 0AF4           ; #endif
+ 0AF4           ;                       uart_Printf(" $%4d\r\n",ringNum);//2016-05-17
+ 0AF4 20910300          lds R18,L88
+ 0AF8 3327              clr R19
+ 0AFA 00E0              ldi R16,<L130
+ 0AFC 10E0              ldi R17,>L130
+ 0AFE 0E940000          xcall _uart_Printf
+ 0B02           ;                       Uart0ReEnable;
+ 0B02 8091C100          lds R24,193
+ 0B06 8061              ori R24,16
+ 0B08 8093C100          sts 193,R24
+ 0B0C           ;                       mainStep = 3;
+ 0B0C 83E0              ldi R24,3
+ 0B0E 80930000          sts L85,R24
+ 0B12           ;                       workStep = 0;
+ 0B12 2224              clr R2
+ 0B14 20920100          sts L86,R2
+ 0B18           ;                       break;
+ 0B18 0BC0              xjmp L109
+ 0B1A           L153:
+ 0B1A           ; 
+ 0B1A           ; 		case 6:		// 释放转盘使用权
+ 0B1A           ; 			mainStep = 0;
+ 0B1A 2224              clr R2
+ 0B1C 20920000          sts L85,R2
+ 0B20           ;                       workStep = 0;
+ 0B20 20920100          sts L86,R2
+ 0B24           ;                       inWork = 0;
+ 0B24 20920200          sts L87,R2
+ 0B28           ;                       TurnPlateUsedLock = 0;
+ 0B28 20920000          sts _TurnPlateUsedLock,R2
+ 0B2C           ;                       TurnPlateUsedLock = 0;
+ 0B2C 20920000          sts _TurnPlateUsedLock,R2
+ 0B30           ;                       break;
+ 0B30           L108:
+ 0B30           L109:
+ 0B30           ; 		}
+ 0B30           ; 	return 0;
+ 0B30 0027              clr R16
+ 0B32           L84:
+ 0B32                   .dbline 0 ; func end
+ 0B32 2896              adiw R28,8
+ 0B34 0C940000          xjmp pop_xgsetF00C
+                        .area bss(ram, con, rel)
+ 0007           L156:
+ 0007                   .blkb 1
+ 0008           L157:
+ 0008                   .blkb 1
+ 0009           L158:
+ 0009                   .blkb 1
+ 000A           L159:
+ 000A                   .blkb 1
+ 000B           L160:
+ 000B                   .blkb 1
+ 000C           L161:
+ 000C                   .blkb 1
+ 000D           L162:
+ 000D                   .blkb 1
+                        .area text(rom, con, rel)
+                ;              i -> <dead>
+                ;              j -> R10,R11
+                ;          ucTmp -> R10
+                ;              l -> y+4
+                        .even
+ 0B38           _TestBQueueProcess::
+ 0B38 0E940000          xcall push_xgsetF00C
+ 0B3C 2897              sbiw R28,8
+ 0B3E           ; }
+ 0B3E           ; 
+ 0B3E           ; unsigned char TestBQueueProcess(void){
+ 0B3E           ;       // 监测测试队列上的测试时间，将到时间的测试任务启动
+ 0B3E           ;       static unsigned char mainStep;          
+ 0B3E           ;       static unsigned char workStep;
+ 0B3E           ;       static unsigned char inWork;
+ 0B3E           ;       static unsigned char ringNum;
+ 0B3E           ;       static unsigned char watiMotTurnplate, waitMotLifter;
+ 0B3E           ;       static unsigned char ReTestCnt;                         // 重复读取计数
+ 0B3E           ;       unsigned char ucTmp;
+ 0B3E           ;       unsigned int i, j;
+ 0B3E           ;       unsigned long l;
+ 0B3E           ;       TestBProcess_mainStep = mainStep;
+ 0B3E 20900700          lds R2,L156
+ 0B42 20920F00          sts _TestBProcess_mainStep,R2
+ 0B46           ;       TestBProcess_workStep = workStep;
+ 0B46 20900800          lds R2,L157
+ 0B4A 20921000          sts _TestBProcess_workStep,R2
+ 0B4E           ;       if(inWork){
+ 0B4E 20900900          lds R2,L158
+ 0B52 2220              tst R2
+ 0B54 09F4              brne X107
+ 0B56 44C0              xjmp L163
+ 0B58           X107:
+ 0B58           X78:
+ 0B58           ; 		if(WaitDelayTime(MOT_TURN_PLATE))
+ 0B58 01E0              ldi R16,1
+ 0B5A 0E940000          xcall _WaitDelayTime
+ 0B5E 0023              tst R16
+ 0B60 89F1              breq L165
+ 0B62           X79:
+ 0B62           ; 		{
+ 0B62           ; 			if(mainStep == 5)	// 测试期间
+ 0B62 80910700          lds R24,L156
+ 0B66 8530              cpi R24,5
+ 0B68 59F5              brne L167
+ 0B6A           X80:
+ 0B6A           ; 			{
+ 0B6A           ; 				if(ReReadFlag == 1)
+ 0B6A 80910E00          lds R24,_ReReadFlag
+ 0B6E 8130              cpi R24,1
+ 0B70 D9F4              brne L169
+ 0B72           X81:
+ 0B72           ; 				{
+ 0B72           ; 					ReTestCnt++;
+ 0B72 80910D00          lds R24,L162
+ 0B76 8F5F              subi R24,255    ; addi 1
+ 0B78 80930D00          sts L162,R24
+ 0B7C           ;                                       if(ReTestCnt == 1)
+ 0B7C 8130              cpi R24,1
+ 0B7E 71F4              brne L171
+ 0B80           X82:
+ 0B80           ; 					{
+ 0B80           ; 						MotRunToSite(MOT_TURN_PLATE,TestQueueB.ringNum[0]);		// 转盘转动
+ 0B80 20911600          lds R18,_TestQueueB
+ 0B84 01E0              ldi R16,1
+ 0B86 0E940000          xcall _MotRunToSite
+ 0B8A           ;                                               ReReadFlag = 0;         // 执行完后清除重测标识
+ 0B8A 2224              clr R2
+ 0B8C 20920E00          sts _ReReadFlag,R2
+ 0B90           ;                                               watiMotTurnplate = 1;
+ 0B90 81E0              ldi R24,1
+ 0B92 80930B00          sts L160,R24
+ 0B96           ;                                               mainStep = 1;
+ 0B96 80930700          sts L156,R24
+ 0B9A           ;                                       }
+ 0B9A 06C0              xjmp L172
+ 0B9C           L171:
+ 0B9C           ; 					else
+ 0B9C           ; 					{
+ 0B9C           ; 						ReReadFlag = 0;		// 执行完后清除重测标识
+ 0B9C 2224              clr R2
+ 0B9E 20920E00          sts _ReReadFlag,R2
+ 0BA2           ;                                               mainStep = 21;
+ 0BA2 85E1              ldi R24,21
+ 0BA4 80930700          sts L156,R24
+ 0BA8           ;                                       }
+ 0BA8           L172:
+ 0BA8           ; 				}
+ 0BA8           L169:
+ 0BA8           ; 				if(ReadColseAnswer)	// 接收到检测完成应答信号，关闭检测
+ 0BA8 20901300          lds R2,_ReadColseAnswer
+ 0BAC 2220              tst R2
+ 0BAE 41F0              breq L173
+ 0BB0           X83:
+ 0BB0           ; 				{
+ 0BB0           ; 					SetDelayTime(MOT_TURN_PLATE, 5);
+ 0BB0 25E0              ldi R18,5
+ 0BB2 30E0              ldi R19,0
+ 0BB4 01E0              ldi R16,1
+ 0BB6 0E940000          xcall _SetDelayTime
+ 0BBA           ;                                       ReadColseAnswer = 0;
+ 0BBA 2224              clr R2
+ 0BBC 20921300          sts _ReadColseAnswer,R2
+ 0BC0           ;                               }
+ 0BC0           L173:
+ 0BC0           ; 			}
+ 0BC0           L167:
+ 0BC0           ; 			return 0;
+ 0BC0 0027              clr R16
+ 0BC2 5EC2              xjmp L155
+ 0BC4           L165:
+ 0BC4           ; 			}
+ 0BC4           ; 		if(watiMotTurnplate){	if(GetMotState(MOT_TURN_PLATE)!=STA_SLAVE_FREE)	return 0;	watiMotTurnplate = 0;	}
+ 0BC4 20900B00          lds R2,L160
+ 0BC8 2220              tst R2
+ 0BCA 51F0              breq L175
+ 0BCC           X84:
+ 0BCC 01E0              ldi R16,1
+ 0BCE 0E940000          xcall _GetMotState
+ 0BD2 0130              cpi R16,1
+ 0BD4 11F0              breq L177
+ 0BD6           X85:
+ 0BD6 0027              clr R16
+ 0BD8 53C2              xjmp L155
+ 0BDA           L177:
+ 0BDA 2224              clr R2
+ 0BDC 20920B00          sts L160,R2
+ 0BE0           L175:
+ 0BE0           ; 		}
+ 0BE0           L163:
+ 0BE0           ; 	
+ 0BE0           ; 	switch(mainStep)
+ 0BE0 A0900700          lds R10,L156
+ 0BE4 BB24              clr R11
+ 0BE6 AA20              tst R10
+ 0BE8 19F4              brne X86
+ 0BEA BB20              tst R11
+ 0BEC 09F4              brne X108
+ 0BEE 35C0              xjmp L182
+ 0BF0           X108:
+ 0BF0           X86:
+ 0BF0 C501              movw R24,R10
+ 0BF2 8130              cpi R24,1
+ 0BF4 E0E0              ldi R30,0
+ 0BF6 9E07              cpc R25,R30
+ 0BF8 09F4              brne X109
+ 0BFA C0C0              xjmp L197
+ 0BFC           X109:
+ 0BFC           X87:
+ 0BFC 8230              cpi R24,2
+ 0BFE E0E0              ldi R30,0
+ 0C00 9E07              cpc R25,R30
+ 0C02 09F4              brne X110
+ 0C04 00C1              xjmp L201
+ 0C06           X110:
+ 0C06           X88:
+ 0C06 8330              cpi R24,3
+ 0C08 E0E0              ldi R30,0
+ 0C0A 9E07              cpc R25,R30
+ 0C0C 09F4              brne X111
+ 0C0E 0CC1              xjmp L202
+ 0C10           X111:
+ 0C10           X89:
+ 0C10 8430              cpi R24,4
+ 0C12 E0E0              ldi R30,0
+ 0C14 9E07              cpc R25,R30
+ 0C16 09F4              brne X112
+ 0C18 20C1              xjmp L205
+ 0C1A           X112:
+ 0C1A           X90:
+ 0C1A 8530              cpi R24,5
+ 0C1C E0E0              ldi R30,0
+ 0C1E 9E07              cpc R25,R30
+ 0C20 09F4              brne X113
+ 0C22 9DC1              xjmp L212
+ 0C24           X113:
+ 0C24           X91:
+ 0C24 8630              cpi R24,6
+ 0C26 E0E0              ldi R30,0
+ 0C28 9E07              cpc R25,R30
+ 0C2A 09F4              brne X114
+ 0C2C 1BC2              xjmp L218
+ 0C2E           X114:
+ 0C2E           X92:
+ 0C2E 8A30              cpi R24,10
+ 0C30 E0E0              ldi R30,0
+ 0C32 9E07              cpc R25,R30
+ 0C34 09F4              brne X115
+ 0C36 86C0              xjmp L195
+ 0C38           X115:
+ 0C38           X93:
+ 0C38 8B30              cpi R24,11
+ 0C3A E0E0              ldi R30,0
+ 0C3C 9E07              cpc R25,R30
+ 0C3E 09F4              brne X116
+ 0C40 94C0              xjmp L196
+ 0C42           X116:
+ 0C42           X94:
+ 0C42 8030              cpi R24,0
+ 0C44 E0E0              ldi R30,0
+ 0C46 9E07              cpc R25,R30
+ 0C48 0CF4              brge X117
+ 0C4A 19C2              xjmp L179
+ 0C4C           X117:
+ 0C4C           X95:
+ 0C4C           L219:
+ 0C4C C501              movw R24,R10
+ 0C4E 8531              cpi R24,21
+ 0C50 E0E0              ldi R30,0
+ 0C52 9E07              cpc R25,R30
+ 0C54 09F4              brne X118
+ 0C56 D9C1              xjmp L216
+ 0C58           X118:
+ 0C58           X96:
+ 0C58 12C2              xjmp L179
+ 0C5A           L182:
+ 0C5A           ; 	{
+ 0C5A           ; 		case 0:		// 监测队头的测试时间
+ 0C5A           ; 			if(TestQueueB.ringNum[0] == 0xff)
+ 0C5A 80911600          lds R24,_TestQueueB
+ 0C5E 8F3F              cpi R24,255
+ 0C60 11F4              brne L183
+ 0C62           X97:
+ 0C62           ; 			{
+ 0C62           ; 			//	if(LampBState != 0)		// 无测试任务,关闭测试光源
+ 0C62           ; 			//		TestBLampClose();
+ 0C62           ; 				return 1;
+ 0C62 01E0              ldi R16,1
+ 0C64 0DC2              xjmp L155
+ 0C66           L183:
+ 0C66           ; 			}
+ 0C66           ; 			else
+ 0C66           ; 			{
+ 0C66           ; 			//	if(LampBState == 0)		// 有测试任务,开启光源
+ 0C66           ; 			//		TestBLampOpen();
+ 0C66           ; 			}
+ 0C66           ; 			if(TestQueueB.testTime[0] != 0)
+ 0C66 40904000          lds R4,_TestQueueB+40+2
+ 0C6A 50904100          lds R5,_TestQueueB+40+2+1
+ 0C6E 20903E00          lds R2,_TestQueueB+40
+ 0C72 30903F00          lds R3,_TestQueueB+40+1
+ 0C76 8894              clc
+ 0C78 2220              tst R2
+ 0C7A 3204              cpc R3,R2
+ 0C7C 4204              cpc R4,R2
+ 0C7E 5204              cpc R5,R2
+ 0C80 09F4              brne X119
+ 0C82 FDC1              xjmp L180
+ 0C84           X119:
+ 0C84           X98:
+ 0C84           ; 			{
+ 0C84           ; 				if(SecondCount > (TestQueueB.testTime[0]-10))
+ 0C84 4AE0              ldi R20,10
+ 0C86 50E0              ldi R21,0
+ 0C88 60E0              ldi R22,0
+ 0C8A 70E0              ldi R23,0
+ 0C8C 241A              sub R2,R20
+ 0C8E 350A              sbc R3,R21
+ 0C90 460A              sbc R4,R22
+ 0C92 570A              sbc R5,R23
+ 0C94 80900200          lds R8,_SecondCount+2
+ 0C98 90900300          lds R9,_SecondCount+2+1
+ 0C9C 60900000          lds R6,_SecondCount
+ 0CA0 70900100          lds R7,_SecondCount+1
+ 0CA4 2614              cp R2,R6
+ 0CA6 3704              cpc R3,R7
+ 0CA8 4804              cpc R4,R8
+ 0CAA 5904              cpc R5,R9
+ 0CAC 08F0              brlo X120
+ 0CAE E7C1              xjmp L180
+ 0CB0           X120:
+ 0CB0           X99:
+ 0CB0           ; 				{
+ 0CB0           ; 					ringNum = TestQueueB.ringNum[0];	
+ 0CB0 20901600          lds R2,_TestQueueB
+ 0CB4 20920A00          sts L159,R2
+ 0CB8           ;                                       // 测试时间到
+ 0CB8           ;                                       if(TurnPlateUsedLock == 0)
+ 0CB8 20900000          lds R2,_TurnPlateUsedLock
+ 0CBC 2220              tst R2
+ 0CBE 09F0              breq X121
+ 0CC0 DEC1              xjmp L180
+ 0CC2           X121:
+ 0CC2           X100:
+ 0CC2           ; 					{
+ 0CC2           ; 						if(255 == insertflag[ringNum])
+ 0CC2 80E0              ldi R24,<_insertflag
+ 0CC4 90E0              ldi R25,>_insertflag
+ 0CC6 E0910A00          lds R30,L159
+ 0CCA FF27              clr R31
+ 0CCC E80F              add R30,R24
+ 0CCE F91F              adc R31,R25
+ 0CD0 8081              ldd R24,z+0
+ 0CD2 8F3F              cpi R24,255
+ 0CD4 09F0              breq X122
+ 0CD6 D3C1              xjmp L180
+ 0CD8           X122:
+ 0CD8           X101:
+ 0CD8           ; 						{
+ 0CD8           ; 							insertflag[ringNum] = 200;
+ 0CD8 80E0              ldi R24,<_insertflag
+ 0CDA 90E0              ldi R25,>_insertflag
+ 0CDC E0910A00          lds R30,L159
+ 0CE0 FF27              clr R31
+ 0CE2 E80F              add R30,R24
+ 0CE4 F91F              adc R31,R25
+ 0CE6 88EC              ldi R24,200
+ 0CE8 8083              std z+0,R24
+ 0CEA           ;                                                       Uart0ReUnable;
+ 0CEA 8091C100          lds R24,193
+ 0CEE 8F7E              andi R24,239
+ 0CF0 8093C100          sts 193,R24
+ 0CF4           ;                                                       uart_Printf("%s $%4d $%4d\r\n",strM3122,ringNum,insertflag[ringNum]);
+ 0CF4 A0900A00          lds R10,L159
+ 0CF8 80E0              ldi R24,<_insertflag
+ 0CFA 90E0              ldi R25,>_insertflag
+ 0CFC EA2D              mov R30,R10
+ 0CFE FF27              clr R31
+ 0D00 E80F              add R30,R24
+ 0D02 F91F              adc R31,R25
+ 0D04 2080              ldd R2,z+0
+ 0D06 3324              clr R3
+ 0D08 3B82              std y+3,R3
+ 0D0A 2A82              std y+2,R2
+ 0D0C 2A2C              mov R2,R10
+ 0D0E 3324              clr R3
+ 0D10 3982              std y+1,R3
+ 0D12 2882              std y+0,R2
+ 0D14 20E0              ldi R18,<_strM3122
+ 0D16 30E0              ldi R19,>_strM3122
+ 0D18 00E0              ldi R16,<L124
+ 0D1A 10E0              ldi R17,>L124
+ 0D1C 0E940000          xcall _uart_Printf
+ 0D20           ;                                                       Uart0ReEnable;
+ 0D20 8091C100          lds R24,193
+ 0D24 8061              ori R24,16
+ 0D26 8093C100          sts 193,R24
+ 0D2A           ;                                                       TurnPlateUsedLock = 1;          // 占用转盘标识
+ 0D2A 81E0              ldi R24,1
+ 0D2C 80930000          sts _TurnPlateUsedLock,R24
+ 0D30           ;                                                       //mainStep = 1;
+ 0D30           ;                                                       mainStep = 10;
+ 0D30 8AE0              ldi R24,10
+ 0D32 80930700          sts L156,R24
+ 0D36           ;                                                       workStep = 0;
+ 0D36 2224              clr R2
+ 0D38 20920800          sts L157,R2
+ 0D3C           ;                                                       inWork = 1; 
+ 0D3C 81E0              ldi R24,1
+ 0D3E 80930900          sts L158,R24
+ 0D42           ;                                               } 
+ 0D42           ;                                       }
+ 0D42           ;                               }
+ 0D42           ;                       }
+ 0D42           ;                       break;
+ 0D42 9DC1              xjmp L180
+ 0D44           L195:
+ 0D44           ; 		case 10:
+ 0D44           ; 			SetMotRunPam(MOT_TURN_PLATE,200,20,CURRENT_TURN_PLATE);// 140,2
+ 0D44 81E0              ldi R24,1
+ 0D46 8A83              std y+2,R24
+ 0D48 84E1              ldi R24,20
+ 0D4A 8883              std y+0,R24
+ 0D4C 28EC              ldi R18,200
+ 0D4E 01E0              ldi R16,1
+ 0D50 0E940000          xcall _SetMotRunPam
+ 0D54           ;                       MotRunToSite(MOT_TURN_PLATE,0);         // 转盘转到零位 
+ 0D54 2227              clr R18
+ 0D56 01E0              ldi R16,1
+ 0D58 0E940000          xcall _MotRunToSite
+ 0D5C           ;                       watiMotTurnplate = 1;
+ 0D5C 81E0              ldi R24,1
+ 0D5E 80930B00          sts L160,R24
+ 0D62           ;                       mainStep = 11;
+ 0D62 8BE0              ldi R24,11
+ 0D64 80930700          sts L156,R24
+ 0D68           ;                       break;
+ 0D68 8AC1              xjmp L180
+ 0D6A           L196:
+ 0D6A           ; 		case 11:
+ 0D6A           ; 			SetDelayTime(MOT_TURN_PLATE,2);
+ 0D6A 22E0              ldi R18,2
+ 0D6C 30E0              ldi R19,0
+ 0D6E 01E0              ldi R16,1
+ 0D70 0E940000          xcall _SetDelayTime
+ 0D74           ;                       mainStep = 1;
+ 0D74 81E0              ldi R24,1
+ 0D76 80930700          sts L156,R24
+ 0D7A           ;                       break;
+ 0D7A 81C1              xjmp L180
+ 0D7C           L197:
+ 0D7C           ; 		case 1:		// 转盘转到当前位置			
+ 0D7C           ; 		//	ringNum = TestQueueB.ringNum[0];
+ 0D7C           ; 			ucTmp = ringNum + 19;	
+ 0D7C 80910A00          lds R24,L159
+ 0D80 8D5E              subi R24,237    ; addi 19
+ 0D82 A82E              mov R10,R24
+ 0D84           ; #ifndef UartSendLong  
+ 0D84           ;                       Uart0ReUnable;
+ 0D84           ;                       uart_Printf("%s $%8d",strM3148,RingQueue.sampInfo[ringNum].testSerial);//2016-05-17
+ 0D84           ; #else
+ 0D84           ;                       Uart0ReUnable;
+ 0D84 8091C100          lds R24,193
+ 0D88 8F7E              andi R24,239
+ 0D8A 8093C100          sts 193,R24
+ 0D8E           ;                       uart_Printf("%s $ ",strM3148);
+ 0D8E 20E0              ldi R18,<_strM3148
+ 0D90 30E0              ldi R19,>_strM3148
+ 0D92 00E0              ldi R16,<L128
+ 0D94 10E0              ldi R17,>L128
+ 0D96 0E940000          xcall _uart_Printf
+ 0D9A           ;                       uart0SendInt(RingQueue.sampInfo[ringNum].testSerial);
+ 0D9A 10910A00          lds R17,L159
+ 0D9E 0DE0              ldi R16,13
+ 0DA0 0103              mulsu R16,R17
+ 0DA2 80E0              ldi R24,<_RingQueue+1
+ 0DA4 90E0              ldi R25,>_RingQueue+1
+ 0DA6 F001              movw R30,R0
+ 0DA8 E80F              add R30,R24
+ 0DAA F91F              adc R31,R25
+ 0DAC 0081              ldd R16,z+0
+ 0DAE 1181              ldd R17,z+1
+ 0DB0 2281              ldd R18,z+2
+ 0DB2 3381              ldd R19,z+3
+ 0DB4 0E940000          xcall _uart0SendInt
+ 0DB8           ; #endif
+ 0DB8           ;                       uart_Printf(" $%4d\r\n",ringNum);//2016-05-17
+ 0DB8 20910A00          lds R18,L159
+ 0DBC 3327              clr R19
+ 0DBE 00E0              ldi R16,<L130
+ 0DC0 10E0              ldi R17,>L130
+ 0DC2 0E940000          xcall _uart_Printf
+ 0DC6           ;                       Uart0ReEnable;
+ 0DC6 8091C100          lds R24,193
+ 0DCA 8061              ori R24,16
+ 0DCC 8093C100          sts 193,R24
+ 0DD0           ;                       if(ucTmp>=RING_QUEUE_NUM)
+ 0DD0 8A2D              mov R24,R10
+ 0DD2 8E31              cpi R24,30
+ 0DD4 10F0              brlo L199
+ 0DD6           X102:
+ 0DD6           ; 				ucTmp -= RING_QUEUE_NUM;
+ 0DD6 8E51              subi R24,30
+ 0DD8 A82E              mov R10,R24
+ 0DDA           L199:
+ 0DDA           ; 			SetMotRunPam(MOT_TURN_PLATE,200,20,CURRENT_TURN_PLATE);
+ 0DDA 81E0              ldi R24,1
+ 0DDC 8A83              std y+2,R24
+ 0DDE 84E1              ldi R24,20
+ 0DE0 8883              std y+0,R24
+ 0DE2 28EC              ldi R18,200
+ 0DE4 01E0              ldi R16,1
+ 0DE6 0E940000          xcall _SetMotRunPam
+ 0DEA           ;                       MotRunToSite(MOT_TURN_PLATE,ucTmp);             // 转盘转到当前位置
+ 0DEA 2A2D              mov R18,R10
+ 0DEC 01E0              ldi R16,1
+ 0DEE 0E940000          xcall _MotRunToSite
+ 0DF2           ;                       watiMotTurnplate = 1;
+ 0DF2 81E0              ldi R24,1
+ 0DF4 80930B00          sts L160,R24
+ 0DF8           ;                       mainStep = 2;
+ 0DF8 82E0              ldi R24,2
+ 0DFA 80930700          sts L156,R24
+ 0DFE           ;                       workStep = 0;
+ 0DFE 2224              clr R2
+ 0E00 20920800          sts L157,R2
+ 0E04           ;                       break;
+ 0E04 3CC1              xjmp L180
+ 0E06           L201:
+ 0E06           ; 		case 2:
+ 0E06           ; 			MotRun(MOT_TURN_PLATE, 100);	// 20
+ 0E06 24E6              ldi R18,100
+ 0E08 30E0              ldi R19,0
+ 0E0A 01E0              ldi R16,1
+ 0E0C 0E940000          xcall _MotRun
+ 0E10           ;                       watiMotTurnplate = 1;
+ 0E10 81E0              ldi R24,1
+ 0E12 80930B00          sts L160,R24
+ 0E16           ;                       SetDelayTime(MOT_TURN_PLATE, 5);
+ 0E16 25E0              ldi R18,5
+ 0E18 30E0              ldi R19,0
+ 0E1A 01E0              ldi R16,1
+ 0E1C 0E940000          xcall _SetDelayTime
+ 0E20           ;                       mainStep = 3;
+ 0E20 83E0              ldi R24,3
+ 0E22 80930700          sts L156,R24
+ 0E26           ;                       break;
+ 0E26 2BC1              xjmp L180
+ 0E28           L202:
+ 0E28           ; 		case 3:
+ 0E28           ; 			MotRun(MOT_TURN_PLATE, -120);	// 20
+ 0E28 28E8              ldi R18,-120
+ 0E2A 3FEF              ldi R19,-1
+ 0E2C 01E0              ldi R16,1
+ 0E2E 0E940000          xcall _MotRun
+ 0E32           ;                       watiMotTurnplate = 1;
+ 0E32 81E0              ldi R24,1
+ 0E34 80930B00          sts L160,R24
+ 0E38           ;                       SetDelayTime(MOT_TURN_PLATE, 10);
+ 0E38 2AE0              ldi R18,10
+ 0E3A 30E0              ldi R19,0
+ 0E3C 01E0              ldi R16,1
+ 0E3E 0E940000          xcall _SetDelayTime
+ 0E42           ;                       ReReadFlag = 0; // 重测标识初始化
+ 0E42 2224              clr R2
+ 0E44 20920E00          sts _ReReadFlag,R2
+ 0E48           ;                       //将B改成A
+ 0E48           ;                       if(LampAState == 0)
+ 0E48 20901500          lds R2,_LampAState
+ 0E4C 2220              tst R2
+ 0E4E 09F4              brne L203
+ 0E50           X103:
+ 0E50           ; 				TestALampOpen();
+ 0E50 D7D8              xcall _TestALampOpen
+ 0E52           L203:
+ 0E52           ; 			mainStep = 4;
+ 0E52 84E0              ldi R24,4
+ 0E54 80930700          sts L156,R24
+ 0E58           ;                       break;
+ 0E58 12C1              xjmp L180
+ 0E5A           L205:
+ 0E5A           ; 		case 4:		// 开始检测
+ 0E5A           ; 			if(SecondCount < (TestQueueB.testTime[0]))
+ 0E5A 40904000          lds R4,_TestQueueB+40+2
+ 0E5E 50904100          lds R5,_TestQueueB+40+2+1
+ 0E62 20903E00          lds R2,_TestQueueB+40
+ 0E66 30903F00          lds R3,_TestQueueB+40+1
+ 0E6A 80900200          lds R8,_SecondCount+2
+ 0E6E 90900300          lds R9,_SecondCount+2+1
+ 0E72 60900000          lds R6,_SecondCount
+ 0E76 70900100          lds R7,_SecondCount+1
+ 0E7A 6214              cp R6,R2
+ 0E7C 7304              cpc R7,R3
+ 0E7E 8404              cpc R8,R4
+ 0E80 9504              cpc R9,R5
+ 0E82 08F4              brsh L206
+ 0E84           X104:
+ 0E84           ; 				break;
+ 0E84 FCC0              xjmp L180
+ 0E86           L206:
+ 0E86           ; 			ringNum = TestQueueB.ringNum[0];
+ 0E86 20901600          lds R2,_TestQueueB
+ 0E8A 20920A00          sts L159,R2
+ 0E8E           ;                       // 开启检测光源
+ 0E8E           ;               //      TestBLampOpen();
+ 0E8E           ;                       l = RingQueue.sampInfo[ringNum].testSerial;
+ 0E8E 122D              mov R17,R2
+ 0E90 0DE0              ldi R16,13
+ 0E92 0103              mulsu R16,R17
+ 0E94 80E0              ldi R24,<_RingQueue+1
+ 0E96 90E0              ldi R25,>_RingQueue+1
+ 0E98 F001              movw R30,R0
+ 0E9A E80F              add R30,R24
+ 0E9C F91F              adc R31,R25
+ 0E9E 2080              ldd R2,z+0
+ 0EA0 3180              ldd R3,z+1
+ 0EA2 4280              ldd R4,z+2
+ 0EA4 5380              ldd R5,z+3
+ 0EA6 2C82              std y+4,R2
+ 0EA8 3D82              std y+5,R3
+ 0EAA 4E82              std y+6,R4
+ 0EAC 5F82              std y+7,R5
+ 0EAE           ;               //      j = RingQueue.sampInfo[ringNum].testTime0;
+ 0EAE           ;                       j = RingQueue.sampInfo[ringNum].testTime0+(unsigned int)(SecondCount-(TestQueueB.testTime[0]));
+ 0EAE 0103              mulsu R16,R17
+ 0EB0 80E0              ldi R24,<_RingQueue+9
+ 0EB2 90E0              ldi R25,>_RingQueue+9
+ 0EB4 F001              movw R30,R0
+ 0EB6 E80F              add R30,R24
+ 0EB8 F91F              adc R31,R25
+ 0EBA A080              ldd R10,z+0
+ 0EBC B180              ldd R11,z+1
+ 0EBE 40904000          lds R4,_TestQueueB+40+2
+ 0EC2 50904100          lds R5,_TestQueueB+40+2+1
+ 0EC6 20903E00          lds R2,_TestQueueB+40
+ 0ECA 30903F00          lds R3,_TestQueueB+40+1
+ 0ECE 80900200          lds R8,_SecondCount+2
+ 0ED2 90900300          lds R9,_SecondCount+2+1
+ 0ED6 60900000          lds R6,_SecondCount
+ 0EDA 70900100          lds R7,_SecondCount+1
+ 0EDE 6218              sub R6,R2
+ 0EE0 7308              sbc R7,R3
+ 0EE2 8408              sbc R8,R4
+ 0EE4 9508              sbc R9,R5
+ 0EE6 A60C              add R10,R6
+ 0EE8 B71C              adc R11,R7
+ 0EEA           ; #ifndef UartSendLong
+ 0EEA           ;                       Uart0ReUnable;
+ 0EEA           ;                       uart_Printf("%s $%8d",strM3113, l);
+ 0EEA           ;                       uart_Printf(" $%4d $%4d",j, ringNum);
+ 0EEA           ;                       uart_Printf(" $%8d\r\n",(unsigned long)SecondCount);
+ 0EEA           ;                       Uart0ReEnable;
+ 0EEA           ; #else
+ 0EEA           ;                       Uart0ReUnable;
+ 0EEA 8091C100          lds R24,193
+ 0EEE 8F7E              andi R24,239
+ 0EF0 8093C100          sts 193,R24
+ 0EF4           ;                       uart_Printf("%s $ ",strM3113);
+ 0EF4 20E0              ldi R18,<_strM3113
+ 0EF6 30E0              ldi R19,>_strM3113
+ 0EF8 00E0              ldi R16,<L128
+ 0EFA 10E0              ldi R17,>L128
+ 0EFC 0E940000          xcall _uart_Printf
+ 0F00           ;                       uart0SendInt(l);
+ 0F00 0C81              ldd R16,y+4
+ 0F02 1D81              ldd R17,y+5
+ 0F04 2E81              ldd R18,y+6
+ 0F06 3F81              ldd R19,y+7
+ 0F08 0E940000          xcall _uart0SendInt
+ 0F0C           ;                       uart_Printf(" $%4d $%4d $ ",j, ringNum);
+ 0F0C 20900A00          lds R2,L159
+ 0F10 3324              clr R3
+ 0F12 3982              std y+1,R3
+ 0F14 2882              std y+0,R2
+ 0F16 9501              movw R18,R10
+ 0F18 00E0              ldi R16,<L144
+ 0F1A 10E0              ldi R17,>L144
+ 0F1C 0E940000          xcall _uart_Printf
+ 0F20           ;                       uart0SendInt(SecondCount);
+ 0F20 20910200          lds R18,_SecondCount+2
+ 0F24 30910300          lds R19,_SecondCount+2+1
+ 0F28 00910000          lds R16,_SecondCount
+ 0F2C 10910100          lds R17,_SecondCount+1
+ 0F30 0E940000          xcall _uart0SendInt
+ 0F34           ;                       uart_Printf("\r\n");
+ 0F34 00E0              ldi R16,<L145
+ 0F36 10E0              ldi R17,>L145
+ 0F38 0E940000          xcall _uart_Printf
+ 0F3C           ;                       Uart0ReEnable;
+ 0F3C 8091C100          lds R24,193
+ 0F40 8061              ori R24,16
+ 0F42 8093C100          sts 193,R24
+ 0F46           ; #endif
+ 0F46           ;                       ReadColseAnswer = 0;    // 测试开始初始化关闭信号
+ 0F46 2224              clr R2
+ 0F48 20921300          sts _ReadColseAnswer,R2
+ 0F4C           ;                       SetDelayTime(MOT_TURN_PLATE, 100);      // 读数延迟
+ 0F4C 24E6              ldi R18,100
+ 0F4E 30E0              ldi R19,0
+ 0F50 01E0              ldi R16,1
+ 0F52 0E940000          xcall _SetDelayTime
+ 0F56           ;                       mainStep = 5;
+ 0F56 85E0              ldi R24,5
+ 0F58 80930700          sts L156,R24
+ 0F5C           ;                       break;
+ 0F5C 90C0              xjmp L180
+ 0F5E           L212:
+ 0F5E           ; 		case 5:		// 检测完毕,释放转盘使用权,关闭检测光源
+ 0F5E           ; 			l = RingQueue.sampInfo[ringNum].testSerial;
+ 0F5E 10910A00          lds R17,L159
+ 0F62 0DE0              ldi R16,13
+ 0F64 0103              mulsu R16,R17
+ 0F66 80E0              ldi R24,<_RingQueue+1
+ 0F68 90E0              ldi R25,>_RingQueue+1
+ 0F6A F001              movw R30,R0
+ 0F6C E80F              add R30,R24
+ 0F6E F91F              adc R31,R25
+ 0F70 2080              ldd R2,z+0
+ 0F72 3180              ldd R3,z+1
+ 0F74 4280              ldd R4,z+2
+ 0F76 5380              ldd R5,z+3
+ 0F78 2C82              std y+4,R2
+ 0F7A 3D82              std y+5,R3
+ 0F7C 4E82              std y+6,R4
+ 0F7E 5F82              std y+7,R5
+ 0F80           ; #ifndef UartSendLong
+ 0F80           ;                       Uart0ReUnable;
+ 0F80           ;                       uart_Printf("%s $%8d",strM3115, l);
+ 0F80           ;                       uart_Printf(" $%8d\r\n",(unsigned long)SecondCount);
+ 0F80           ;                       Uart0ReEnable;
+ 0F80           ; #else
+ 0F80           ;                       Uart0ReUnable;
+ 0F80 8091C100          lds R24,193
+ 0F84 8F7E              andi R24,239
+ 0F86 8093C100          sts 193,R24
+ 0F8A           ;                       uart_Printf("%s $ ",strM3115, l);
+ 0F8A 2C80              ldd R2,y+4
+ 0F8C 3D80              ldd R3,y+5
+ 0F8E 4E80              ldd R4,y+6
+ 0F90 5F80              ldd R5,y+7
+ 0F92 2882              std y+0,R2
+ 0F94 3982              std y+1,R3
+ 0F96 4A82              std y+2,R4
+ 0F98 5B82              std y+3,R5
+ 0F9A 20E0              ldi R18,<_strM3115
+ 0F9C 30E0              ldi R19,>_strM3115
+ 0F9E 00E0              ldi R16,<L128
+ 0FA0 10E0              ldi R17,>L128
+ 0FA2 0E940000          xcall _uart_Printf
+ 0FA6           ;                       uart0SendInt(l);
+ 0FA6 0C81              ldd R16,y+4
+ 0FA8 1D81              ldd R17,y+5
+ 0FAA 2E81              ldd R18,y+6
+ 0FAC 3F81              ldd R19,y+7
+ 0FAE 0E940000          xcall _uart0SendInt
+ 0FB2           ;                       uart_Printf(" $ ");
+ 0FB2 00E0              ldi R16,<L148
+ 0FB4 10E0              ldi R17,>L148
+ 0FB6 0E940000          xcall _uart_Printf
+ 0FBA           ;                       uart0SendInt(SecondCount);
+ 0FBA 20910200          lds R18,_SecondCount+2
+ 0FBE 30910300          lds R19,_SecondCount+2+1
+ 0FC2 00910000          lds R16,_SecondCount
+ 0FC6 10910100          lds R17,_SecondCount+1
+ 0FCA 0E940000          xcall _uart0SendInt
+ 0FCE           ;                       uart_Printf("\r\n");
+ 0FCE 00E0              ldi R16,<L145
+ 0FD0 10E0              ldi R17,>L145
+ 0FD2 0E940000          xcall _uart_Printf
+ 0FD6           ;                       Uart0ReEnable;
+ 0FD6 8091C100          lds R24,193
+ 0FDA 8061              ori R24,16
+ 0FDC 8093C100          sts 193,R24
+ 0FE0           ; #endif
+ 0FE0           ;                       // 关闭检测光源,B改成A
+ 0FE0           ;                       if(LampAState != 0 && CardNoneUseful == 1)
+ 0FE0 20901500          lds R2,_LampAState
+ 0FE4 2220              tst R2
+ 0FE6 29F0              breq L214
+ 0FE8           X105:
+ 0FE8 80910000          lds R24,_CardNoneUseful
+ 0FEC 8130              cpi R24,1
+ 0FEE 09F4              brne L214
+ 0FF0           X106:
+ 0FF0           ; 				TestALampClose();
+ 0FF0 1AD8              xcall _TestALampClose
+ 0FF2           L214:
+ 0FF2           ; 			TestQueueForward(&TestQueueB);		// 删除已完成的队头任务，队列前进一步
+ 0FF2 00E0              ldi R16,<_TestQueueB
+ 0FF4 10E0              ldi R17,>_TestQueueB
+ 0FF6 EED9              xcall _TestQueueForward
+ 0FF8           ;                       
+ 0FF8           ;               //      MotRunToSite(MOT_TURN_PLATE,0);         // 转盘运行到零位
+ 0FF8           ;                       SetDelayTime(MOT_TURN_PLATE, 10);
+ 0FF8 2AE0              ldi R18,10
+ 0FFA 30E0              ldi R19,0
+ 0FFC 01E0              ldi R16,1
+ 0FFE 0E940000          xcall _SetDelayTime
+ 1002           ;               //      watiMotTurnplate = 1;
+ 1002           ;                       mainStep = 6;
+ 1002 86E0              ldi R24,6
+ 1004 80930700          sts L156,R24
+ 1008           ;                       break;
+ 1008 3AC0              xjmp L180
+ 100A           L216:
+ 100A           ; 			
+ 100A           ; 			case 21:		// 转盘转到当前位置			 //  20170518pan
+ 100A           ; #ifndef UartSendLong	
+ 100A           ; 			Uart0ReUnable;
+ 100A           ; 			uart_Printf("%s $%8d",strM3148,RingQueue.sampInfo[ringNum].testSerial);//2016-05-17
+ 100A           ; #else
+ 100A           ; 			Uart0ReUnable;
+ 100A 8091C100          lds R24,193
+ 100E 8F7E              andi R24,239
+ 1010 8093C100          sts 193,R24
+ 1014           ;                       uart_Printf("%s $ ",strM3148);
+ 1014 20E0              ldi R18,<_strM3148
+ 1016 30E0              ldi R19,>_strM3148
+ 1018 00E0              ldi R16,<L128
+ 101A 10E0              ldi R17,>L128
+ 101C 0E940000          xcall _uart_Printf
+ 1020           ;                       uart0SendInt(RingQueue.sampInfo[ringNum].testSerial);
+ 1020 10910A00          lds R17,L159
+ 1024 0DE0              ldi R16,13
+ 1026 0103              mulsu R16,R17
+ 1028 80E0              ldi R24,<_RingQueue+1
+ 102A 90E0              ldi R25,>_RingQueue+1
+ 102C F001              movw R30,R0
+ 102E E80F              add R30,R24
+ 1030 F91F              adc R31,R25
+ 1032 0081              ldd R16,z+0
+ 1034 1181              ldd R17,z+1
+ 1036 2281              ldd R18,z+2
+ 1038 3381              ldd R19,z+3
+ 103A 0E940000          xcall _uart0SendInt
+ 103E           ; #endif
+ 103E           ;                       uart_Printf(" $%4d\r\n",ringNum);//2016-05-17
+ 103E 20910A00          lds R18,L159
+ 1042 3327              clr R19
+ 1044 00E0              ldi R16,<L130
+ 1046 10E0              ldi R17,>L130
+ 1048 0E940000          xcall _uart_Printf
+ 104C           ;                       Uart0ReEnable;
+ 104C 8091C100          lds R24,193
+ 1050 8061              ori R24,16
+ 1052 8093C100          sts 193,R24
+ 1056           ;                       mainStep = 3;
+ 1056 83E0              ldi R24,3
+ 1058 80930700          sts L156,R24
+ 105C           ;                       workStep = 0;
+ 105C 2224              clr R2
+ 105E 20920800          sts L157,R2
+ 1062           ;                       break;
+ 1062 0DC0              xjmp L180
+ 1064           L218:
+ 1064           ; 			
+ 1064           ; 		case 6:		// 释放转盘使用权
+ 1064           ; 			mainStep = 0;
+ 1064 2224              clr R2
+ 1066 20920700          sts L156,R2
+ 106A           ;                       workStep = 0;
+ 106A 20920800          sts L157,R2
+ 106E           ;                       inWork = 0;
+ 106E 20920900          sts L158,R2
+ 1072           ;                       ReTestCnt = 0;
+ 1072 20920D00          sts L162,R2
+ 1076           ;                       TurnPlateUsedLock = 0;
+ 1076 20920000          sts _TurnPlateUsedLock,R2
+ 107A           ;                       TurnPlateUsedLock = 0;
+ 107A 20920000          sts _TurnPlateUsedLock,R2
+ 107E           ;                       break;
+ 107E           L179:
+ 107E           L180:
+ 107E           ; 		}
+ 107E           ; 	return 0;
+ 107E 0027              clr R16
+ 1080           L155:
+ 1080                   .dbline 0 ; func end
+ 1080 2896              adiw R28,8
+ 1082 0C940000          xjmp pop_xgsetF00C
+                        .even
+ 1086           _SetReReadFlag::
+ 1086           ; }
+ 1086           ; 
+ 1086           ; void SetReReadFlag(void)
+ 1086           ; {
+ 1086           ; 	ReReadFlag = 1;
+ 1086 81E0              ldi R24,1
+ 1088 80930E00          sts _ReReadFlag,R24
+ 108C           ;       Uart0ReUnable;
+ 108C 8091C100          lds R24,193
+ 1090 8F7E              andi R24,239
+ 1092 8093C100          sts 193,R24
+ 1096           ;       uart_Printf("%s\r\n",strM3155);
+ 1096 20E0              ldi R18,<_strM3155
+ 1098 30E0              ldi R19,>_strM3155
+ 109A 00E0              ldi R16,<L26
+ 109C 10E0              ldi R17,>L26
+ 109E 0E940000          xcall _uart_Printf
+ 10A2           ;       Uart0ReEnable;
+ 10A2 8091C100          lds R24,193
+ 10A6 8061              ori R24,16
+ 10A8 8093C100          sts 193,R24
+ 10AC           L220:
+ 10AC                   .dbline 0 ; func end
+ 10AC 0895              ret
+                        .area bss(ram, con, rel)
+ 000E           _ReReadFlag::
+ 000E                   .blkb 1
+ 000F           _TestBProcess_mainStep:
+ 000F                   .blkb 1
+ 0010           _TestBProcess_workStep:
+ 0010                   .blkb 1
+ 0011           _TestAProcess_mainStep:
+ 0011                   .blkb 1
+ 0012           _TestAProcess_workStep:
+ 0012                   .blkb 1
+ 0013           _ReadColseAnswer:
+ 0013                   .blkb 1
+ 0014           _LampBState:
+ 0014                   .blkb 1
+ 0015           _LampAState:
+ 0015                   .blkb 1
+ 0016           _TestQueueB::
+ 0016                   .blkb 201
+ 00DF           _TestQueueA::
+ 00DF                   .blkb 201
+ 01A8           _insertflag::
+ 01A8                   .blkb 30
+                        .area data(ram, con, rel)
+ 0000           L148:
+ 0000                   .blkb 4
+                        .area idata
+ 0000 20242000          .byte 32,36,32,0
+                        .area data(ram, con, rel)
+ 0004           L145:
+ 0004                   .blkb 3
+                        .area idata
+ 0004 0D0A00            .byte 13,10,0
+                        .area data(ram, con, rel)
+ 0007           L144:
+ 0007                   .blkb 14
+                        .area idata
+ 0007 2024253464202425346420242000      .byte 32,36,37,52,'d,32,36,37,52,'d,32,36,32,0
+                        .area data(ram, con, rel)
+ 0015           L130:
+ 0015                   .blkb 8
+                        .area idata
+ 0015 20242534640D0A00  .byte 32,36,37,52,'d,13,10,0
+                        .area data(ram, con, rel)
+ 001D           L128:
+ 001D                   .blkb 6
+                        .area idata
+ 001D 257320242000      .byte 37,'s,32,36,32,0
+                        .area data(ram, con, rel)
+ 0023           L124:
+ 0023                   .blkb 15
+                        .area idata
+ 0023 2573202425346420242534640D0A00    .byte 37,'s,32,36,37,52,'d,32,36,37,52,'d,13,10,0
+                        .area data(ram, con, rel)
+ 0032           L83:
+ 0032                   .blkb 33
+                        .area idata
+ 0032 2A333230352054657374425374657053  .byte 42,51,50,48,53,32,'T,'e,'s,'t,'B,'S,'t,'e,'p,'S
+ 0042 74617465202425326420242532640D0A  .byte 't,'a,'t,'e,32,36,37,50,'d,32,36,37,50,'d,13,10
+ 0052 00                .byte 0
+                        .area data(ram, con, rel)
+ 0053           L82:
+ 0053                   .blkb 33
+                        .area idata
+ 0053 2A333230342054657374415374657053  .byte 42,51,50,48,52,32,'T,'e,'s,'t,'A,'S,'t,'e,'p,'S
+ 0063 74617465202425326420242532640D0A  .byte 't,'a,'t,'e,32,36,37,50,'d,32,36,37,50,'d,13,10
+ 0073 00                .byte 0
+                        .area data(ram, con, rel)
+ 0074           L26:
+ 0074                   .blkb 5
+                        .area idata
+ 0074 25730D0A00        .byte 37,'s,13,10,0
+                        .area data(ram, con, rel)
+                ; }
+                ; 
+                ; 

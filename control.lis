@@ -1,0 +1,4524 @@
+                        .module control.c
+                        .area data(ram, con, rel)
+ 0000           __LEDSTATE::
+ 0000                   .blkb 1
+                        .area idata
+ 0000 00                .byte 0
+                        .area data(ram, con, rel)
+                        .area text(rom, con, rel)
+                ;              i -> R20
+                        .even
+ 0000           _InitControlLayerData::
+ 0000 4A93              st -y,R20
+ 0002           ; 
+ 0002           ; 
+ 0002           ; #include <iom1280v.h>
+ 0002           ; #include "B1404_LIB.h"
+ 0002           ; #include "Common.h"
+ 0002           ; 
+ 0002           ; 
+ 0002           ; extern  unsigned char _SampSW;         
+ 0002           ; unsigned char _LEDSTATE = 0;   //0表示测试过程是红灯，1表示测试过程是绿灯
+ 0002           ; 
+ 0002           ; 
+ 0002           ; typedef struct _MOTOR_POSITION{
+ 0002           ;       unsigned char defPosNum;        // 预定义位置
+ 0002           ;       int stepPos;            // 步进数位置
+ 0002           ; }MOTOR_POSITION;
+ 0002           ; 
+ 0002           ; 
+ 0002           ; extern unsigned char ControlModel;
+ 0002           ; extern unsigned char WorkProcessStep;         // 工作进程号
+ 0002           ; 
+ 0002           ; 
+ 0002           ; unsigned char (*EvenPosChangeProcess)(INFO_EVENT * pInfoEvent);
+ 0002           ; unsigned char (*EvenLiquidProcess)(INFO_EVENT * pInfoEvent);
+ 0002           ; unsigned char (*EvenCardStoreProcess)(INFO_EVENT * pInfoEvent);
+ 0002           ; 
+ 0002           ; MOTOR_POSITION MotorPosition[SLAVE_NUM];
+ 0002           ; unsigned char MotModulePhoSta[SLAVE_NUM][2];  // 电机模块光藕状态信息
+ 0002           ; unsigned char LiquidState[4][2];      // 液路状态和参数
+ 0002           ; unsigned char StoreHumi;                      // 片仓湿度
+ 0002           ; unsigned char StoreTemp;                      // 片仓温度
+ 0002           ; 
+ 0002           ; unsigned char _RingPieceState[RING_QUEUE_NUM];        // 转盘干片状态, 0:空, 1:存在, 255:无效
+ 0002           ; 
+ 0002           ; 
+ 0002           ; // 数据初始化
+ 0002           ; void InitControlLayerData(void){
+ 0002           ;       unsigned char i;
+ 0002           ;       for(i=0; i<SLAVE_NUM; i++){
+ 0002 4427              clr R20
+ 0004 15C0              xjmp L5
+ 0006           L2:
+ 0006           ; 		MotorPosition[i].defPosNum = 0xf0;
+ 0006 03E0              ldi R16,3
+ 0008 142F              mov R17,R20
+ 000A 0103              mulsu R16,R17
+ 000C 80E0              ldi R24,<_MotorPosition
+ 000E 90E0              ldi R25,>_MotorPosition
+ 0010 F001              movw R30,R0
+ 0012 E80F              add R30,R24
+ 0014 F91F              adc R31,R25
+ 0016 80EF              ldi R24,240
+ 0018 8083              std z+0,R24
+ 001A           ;               MotorPosition[i].stepPos = 0x7fff;
+ 001A 0103              mulsu R16,R17
+ 001C 80E0              ldi R24,<_MotorPosition+1
+ 001E 90E0              ldi R25,>_MotorPosition+1
+ 0020 F001              movw R30,R0
+ 0022 E80F              add R30,R24
+ 0024 F91F              adc R31,R25
+ 0026 8FEF              ldi R24,32767
+ 0028 9FE7              ldi R25,127
+ 002A 9183              std z+1,R25
+ 002C 8083              std z+0,R24
+ 002E           ;               }
+ 002E           L3:
+ 002E 4395              inc R20
+ 0030           L5:
+ 0030 4F30              cpi R20,15
+ 0032 48F3              brlo L2
+ 0034           X0:
+ 0034           ; 	EvenPosChangeProcess = 0;
+ 0034 2224              clr R2
+ 0036 3324              clr R3
+ 0038 30928D00          sts _EvenPosChangeProcess+1,R3
+ 003C 20928C00          sts _EvenPosChangeProcess,R2
+ 0040           ;       EvenLiquidProcess = 0;
+ 0040 30928B00          sts _EvenLiquidProcess+1,R3
+ 0044 20928A00          sts _EvenLiquidProcess,R2
+ 0048           ;       EvenCardStoreProcess = 0;
+ 0048 30928900          sts _EvenCardStoreProcess+1,R3
+ 004C 20928800          sts _EvenCardStoreProcess,R2
+ 0050           L1:
+ 0050                   .dbline 0 ; func end
+ 0050 4991              ld R20,y+
+ 0052 0895              ret
+ 0054           ;              n -> R16
+                        .even
+ 0054           _GetRingPieceState::
+ 0054           ; }
+ 0054           ; 
+ 0054           ; unsigned int time;
+ 0054           ; unsigned int uart1ReceiveOutTime;
+ 0054           ; 
+ 0054           ; 
+ 0054           ; unsigned char GetRingPieceState(unsigned char n){
+ 0054           ; 	if(n>=RING_QUEUE_NUM)
+ 0054 0E31              cpi R16,30
+ 0056 10F0              brlo L8
+ 0058           X1:
+ 0058           ; 		return 0xff;
+ 0058 0FEF              ldi R16,255
+ 005A 07C0              xjmp L7
+ 005C           L8:
+ 005C           ; 	return _RingPieceState[n];
+ 005C 80E0              ldi R24,<__RingPieceState
+ 005E 90E0              ldi R25,>__RingPieceState
+ 0060 E02F              mov R30,R16
+ 0062 FF27              clr R31
+ 0064 E80F              add R30,R24
+ 0066 F91F              adc R31,R25
+ 0068 0081              ldd R16,z+0
+ 006A           L7:
+ 006A                   .dbline 0 ; func end
+ 006A 0895              ret
+                        .even
+ 006C           _GetStoreHumi::
+ 006C           ; }
+ 006C           ; 
+ 006C           ; // 温湿度
+ 006C           ; unsigned char GetStoreHumi(void){
+ 006C           ; 	return StoreHumi;
+ 006C 00913400          lds R16,_StoreHumi
+ 0070           L10:
+ 0070                   .dbline 0 ; func end
+ 0070 0895              ret
+                        .even
+ 0072           _GetStoreTemp::
+ 0072           ; }
+ 0072           ; unsigned char GetStoreTemp(void){
+ 0072           ; 	return StoreTemp;
+ 0072 00913300          lds R16,_StoreTemp
+ 0076           L11:
+ 0076                   .dbline 0 ; func end
+ 0076 0895              ret
+ 0078           ;       slaveNum -> R10
+                        .even
+ 0078           _SetMotPosIdle::
+ 0078 AA92              st -y,R10
+ 007A A02E              mov R10,R16
+ 007C           ; }
+ 007C           ; 
+ 007C           ; // 电机位置
+ 007C           ; void SetMotPosIdle(unsigned char slaveNum)
+ 007C           ; {
+ 007C           ;       MotorPosition[slaveNum].defPosNum = 0xf0;
+ 007C 03E0              ldi R16,3
+ 007E 1A2D              mov R17,R10
+ 0080 0103              mulsu R16,R17
+ 0082 80E0              ldi R24,<_MotorPosition
+ 0084 90E0              ldi R25,>_MotorPosition
+ 0086 F001              movw R30,R0
+ 0088 E80F              add R30,R24
+ 008A F91F              adc R31,R25
+ 008C 80EF              ldi R24,240
+ 008E 8083              std z+0,R24
+ 0090           L12:
+ 0090                   .dbline 0 ; func end
+ 0090 A990              ld R10,y+
+ 0092 0895              ret
+ 0094           ;       slaveNum -> R10
+                        .even
+ 0094           _GetMotPositionOfSite::
+ 0094 AA92              st -y,R10
+ 0096 A02E              mov R10,R16
+ 0098           ; //    MotorPosition[slaveNum].stepPos = 0x7fff;
+ 0098           ; }
+ 0098           ; unsigned char GetMotPositionOfSite(unsigned char slaveNum){
+ 0098           ;       return MotorPosition[slaveNum].defPosNum;
+ 0098 03E0              ldi R16,3
+ 009A 1A2D              mov R17,R10
+ 009C 0103              mulsu R16,R17
+ 009E 80E0              ldi R24,<_MotorPosition
+ 00A0 90E0              ldi R25,>_MotorPosition
+ 00A2 F001              movw R30,R0
+ 00A4 E80F              add R30,R24
+ 00A6 F91F              adc R31,R25
+ 00A8 0081              ldd R16,z+0
+ 00AA           L13:
+ 00AA                   .dbline 0 ; func end
+ 00AA A990              ld R10,y+
+ 00AC 0895              ret
+ 00AE           ;       slaveNum -> R10
+                        .even
+ 00AE           _GetMotPositionOfStep::
+ 00AE AA92              st -y,R10
+ 00B0 A02E              mov R10,R16
+ 00B2           ; }
+ 00B2           ; int GetMotPositionOfStep(unsigned char slaveNum){
+ 00B2           ;       return MotorPosition[slaveNum].stepPos;
+ 00B2 03E0              ldi R16,3
+ 00B4 1A2D              mov R17,R10
+ 00B6 0103              mulsu R16,R17
+ 00B8 80E0              ldi R24,<_MotorPosition+1
+ 00BA 90E0              ldi R25,>_MotorPosition+1
+ 00BC F001              movw R30,R0
+ 00BE E80F              add R30,R24
+ 00C0 F91F              adc R31,R25
+ 00C2 0081              ldd R16,z+0
+ 00C4 1181              ldd R17,z+1
+ 00C6           L14:
+ 00C6                   .dbline 0 ; func end
+ 00C6 A990              ld R10,y+
+ 00C8 0895              ret
+ 00CA           ;            num -> R16
+                        .even
+ 00CA           _GetLiquidMonitorState::
+ 00CA           ; }
+ 00CA           ; 
+ 00CA           ; // 获取液路状态
+ 00CA           ; unsigned char GetLiquidMonitorState(unsigned char num){
+ 00CA           ; 	if(num>3)
+ 00CA 83E0              ldi R24,3
+ 00CC 8017              cp R24,R16
+ 00CE 08F4              brsh L17
+ 00D0           X2:
+ 00D0           ; 		num = 3;
+ 00D0 03E0              ldi R16,3
+ 00D2           L17:
+ 00D2           ; 	return LiquidState[num][0];
+ 00D2 80E0              ldi R24,<_LiquidState
+ 00D4 90E0              ldi R25,>_LiquidState
+ 00D6 E02F              mov R30,R16
+ 00D8 FF27              clr R31
+ 00DA EE0F              lsl R30
+ 00DC FF1F              rol R31
+ 00DE E80F              add R30,R24
+ 00E0 F91F              adc R31,R25
+ 00E2 0081              ldd R16,z+0
+ 00E4           L16:
+ 00E4                   .dbline 0 ; func end
+ 00E4 0895              ret
+ 00E6           ;            num -> R16
+                        .even
+ 00E6           _GetLiquidMonitorStatePam::
+ 00E6           ; }
+ 00E6           ; unsigned char GetLiquidMonitorStatePam(unsigned char num){
+ 00E6           ; 	if(num>3)
+ 00E6 83E0              ldi R24,3
+ 00E8 8017              cp R24,R16
+ 00EA 08F4              brsh L20
+ 00EC           X3:
+ 00EC           ; 		num = 3;
+ 00EC 03E0              ldi R16,3
+ 00EE           L20:
+ 00EE           ; 	return LiquidState[num][1];
+ 00EE 80E0              ldi R24,<_LiquidState+1
+ 00F0 90E0              ldi R25,>_LiquidState+1
+ 00F2 E02F              mov R30,R16
+ 00F4 FF27              clr R31
+ 00F6 EE0F              lsl R30
+ 00F8 FF1F              rol R31
+ 00FA E80F              add R30,R24
+ 00FC F91F              adc R31,R25
+ 00FE 0081              ldd R16,z+0
+ 0100           L19:
+ 0100                   .dbline 0 ; func end
+ 0100 0895              ret
+ 0102           ;           proc -> R16,R17
+                        .even
+ 0102           _RegisterPosChangeEvenProcess::
+ 0102           ; }
+ 0102           ; 
+ 0102           ; 
+ 0102           ; // 注册位置改变自动处理函数
+ 0102           ; unsigned char RegisterPosChangeEvenProcess(void * proc){
+ 0102           ; 	EvenPosChangeProcess = proc;
+ 0102 10938D00          sts _EvenPosChangeProcess+1,R17
+ 0106 00938C00          sts _EvenPosChangeProcess,R16
+ 010A           L23:
+ 010A                   .dbline 0 ; func end
+ 010A 0895              ret
+                        .even
+ 010C           _CleanPosChangeEvenProcess::
+ 010C           ; }
+ 010C           ; void CleanPosChangeEvenProcess(void){
+ 010C           ; 	EvenPosChangeProcess = 0;
+ 010C 2224              clr R2
+ 010E 3324              clr R3
+ 0110 30928D00          sts _EvenPosChangeProcess+1,R3
+ 0114 20928C00          sts _EvenPosChangeProcess,R2
+ 0118           L24:
+ 0118                   .dbline 0 ; func end
+ 0118 0895              ret
+ 011A           ;           proc -> R16,R17
+                        .even
+ 011A           _RegisterLiquidEvenProcess::
+ 011A           ; }
+ 011A           ; // 注册液路事件处理函数
+ 011A           ; unsigned char RegisterLiquidEvenProcess(void * proc){
+ 011A           ; 	EvenLiquidProcess = proc;
+ 011A 10938B00          sts _EvenLiquidProcess+1,R17
+ 011E 00938A00          sts _EvenLiquidProcess,R16
+ 0122           L25:
+ 0122                   .dbline 0 ; func end
+ 0122 0895              ret
+                        .even
+ 0124           _CleanLiquidEvenProcess::
+ 0124           ; }
+ 0124           ; void CleanLiquidEvenProcess(void){
+ 0124           ; 	EvenLiquidProcess = 0;
+ 0124 2224              clr R2
+ 0126 3324              clr R3
+ 0128 30928B00          sts _EvenLiquidProcess+1,R3
+ 012C 20928A00          sts _EvenLiquidProcess,R2
+ 0130           L26:
+ 0130                   .dbline 0 ; func end
+ 0130 0895              ret
+ 0132           ;           proc -> R16,R17
+                        .even
+ 0132           _RegisterCardStoreEvenProcess::
+ 0132           ; }
+ 0132           ; // 注册片仓事件处理函数
+ 0132           ; unsigned char RegisterCardStoreEvenProcess(void * proc)
+ 0132           ; {
+ 0132           ; 	EvenCardStoreProcess = proc;
+ 0132 10938900          sts _EvenCardStoreProcess+1,R17
+ 0136 00938800          sts _EvenCardStoreProcess,R16
+ 013A           L27:
+ 013A                   .dbline 0 ; func end
+ 013A 0895              ret
+                        .even
+ 013C           _CleanPosCardStoreProcess::
+ 013C           ; }
+ 013C           ; void CleanPosCardStoreProcess(void)
+ 013C           ; {
+ 013C           ; 	EvenCardStoreProcess = 0;
+ 013C 2224              clr R2
+ 013E 3324              clr R3
+ 0140 30928900          sts _EvenCardStoreProcess+1,R3
+ 0144 20928800          sts _EvenCardStoreProcess,R2
+ 0148           L28:
+ 0148                   .dbline 0 ; func end
+ 0148 0895              ret
+                        .area data(ram, con, rel)
+ 0001           L30:
+ 0001                   .blkb 2
+                        .area idata
+ 0001 3000              .byte 48,0
+                        .area data(ram, con, rel)
+ 0003                   .blkb 2
+                        .area idata
+ 0003 3100              .byte 49,0
+                        .area data(ram, con, rel)
+                        .area text(rom, con, rel)
+                ;              i -> R22
+                ;              s -> y+6
+                ;            num -> R20
+                ;       slaveNum -> R10
+                        .even
+ 014A           _UpLoadingModuleSensorState::
+ 014A 0E940000          xcall push_xgsetF00C
+ 014E 422F              mov R20,R18
+ 0150 A02E              mov R10,R16
+ 0152 2A97              sbiw R28,10
+ 0154           ; }
+ 0154           ; 
+ 0154           ; // 上传指定传感器状态信息
+ 0154           ; extern unsigned char CardSurplusState[6];     // 卡片剩余状态
+ 0154           ; extern unsigned char CardStoretate[6];                // 片仓状态
+ 0154           ; void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
+ 0154           ;       char s[2][2] = {"0","1"};
+ 0154 80E0              ldi R24,<L30
+ 0156 90E0              ldi R25,>L30
+ 0158 FE01              movw R30,R28
+ 015A 3696              adiw R30,6
+ 015C 04E0              ldi R16,4
+ 015E 10E0              ldi R17,0
+ 0160 FA93              st -y,R31
+ 0162 EA93              st -y,R30
+ 0164 9A93              st -y,R25
+ 0166 8A93              st -y,R24
+ 0168 0E940000          xcall asgnblk
+ 016C           ;       unsigned char i;
+ 016C           ;       switch(slaveNum){
+ 016C 6A2D              mov R22,R10
+ 016E 7727              clr R23
+ 0170 6030              cpi R22,0
+ 0172 6707              cpc R22,R23
+ 0174 09F4              brne X30
+ 0176 2EC0              xjmp L34
+ 0178           X30:
+ 0178           X4:
+ 0178 6130              cpi R22,1
+ 017A E0E0              ldi R30,0
+ 017C 7E07              cpc R23,R30
+ 017E 09F4              brne X31
+ 0180 0EC1              xjmp L55
+ 0182           X31:
+ 0182           X5:
+ 0182 6230              cpi R22,2
+ 0184 E0E0              ldi R30,0
+ 0186 7E07              cpc R23,R30
+ 0188 09F4              brne X32
+ 018A 09C1              xjmp L55
+ 018C           X32:
+ 018C           X6:
+ 018C 6330              cpi R22,3
+ 018E E0E0              ldi R30,0
+ 0190 7E07              cpc R23,R30
+ 0192 09F4              brne X33
+ 0194 04C1              xjmp L55
+ 0196           X33:
+ 0196           X7:
+ 0196 6430              cpi R22,4
+ 0198 E0E0              ldi R30,0
+ 019A 7E07              cpc R23,R30
+ 019C 09F4              brne X34
+ 019E FFC0              xjmp L55
+ 01A0           X34:
+ 01A0           X8:
+ 01A0 6530              cpi R22,5
+ 01A2 E0E0              ldi R30,0
+ 01A4 7E07              cpc R23,R30
+ 01A6 09F4              brne X35
+ 01A8 FAC0              xjmp L55
+ 01AA           X35:
+ 01AA           X9:
+ 01AA 6830              cpi R22,8
+ 01AC E0E0              ldi R30,0
+ 01AE 7E07              cpc R23,R30
+ 01B0 09F4              brne X36
+ 01B2 F5C0              xjmp L55
+ 01B4           X36:
+ 01B4           X10:
+ 01B4 6C30              cpi R22,12
+ 01B6 E0E0              ldi R30,0
+ 01B8 7E07              cpc R23,R30
+ 01BA 09F4              brne X37
+ 01BC F0C0              xjmp L55
+ 01BE           X37:
+ 01BE           X11:
+ 01BE 6D30              cpi R22,13
+ 01C0 E0E0              ldi R30,0
+ 01C2 7E07              cpc R23,R30
+ 01C4 09F4              brne X38
+ 01C6 24C1              xjmp L60
+ 01C8           X38:
+ 01C8           X12:
+ 01C8 6E30              cpi R22,14
+ 01CA E0E0              ldi R30,0
+ 01CC 7E07              cpc R23,R30
+ 01CE 09F4              brne X39
+ 01D0 56C1              xjmp L65
+ 01D2           X39:
+ 01D2           X13:
+ 01D2 A7C1              xjmp L32
+ 01D4           L34:
+ 01D4           ; 		case 0:		// 主控制板上的信号
+ 01D4           ; 			switch(num){
+ 01D4 642F              mov R22,R20
+ 01D6 7727              clr R23
+ 01D8 6030              cpi R22,0
+ 01DA 6707              cpc R22,R23
+ 01DC A9F0              breq L38
+ 01DE           X14:
+ 01DE 6130              cpi R22,1
+ 01E0 E0E0              ldi R30,0
+ 01E2 7E07              cpc R23,R30
+ 01E4 09F4              brne X40
+ 01E6 3AC0              xjmp L42
+ 01E8           X40:
+ 01E8           X15:
+ 01E8 6230              cpi R22,2
+ 01EA E0E0              ldi R30,0
+ 01EC 7E07              cpc R23,R30
+ 01EE 09F4              brne X41
+ 01F0 5FC0              xjmp L45
+ 01F2           X41:
+ 01F2           X16:
+ 01F2 6330              cpi R22,3
+ 01F4 E0E0              ldi R30,0
+ 01F6 7E07              cpc R23,R30
+ 01F8 09F4              brne X42
+ 01FA 89C0              xjmp L50
+ 01FC           X42:
+ 01FC           X17:
+ 01FC 6430              cpi R22,4
+ 01FE E0E0              ldi R30,0
+ 0200 7E07              cpc R23,R30
+ 0202 09F4              brne X43
+ 0204 A2C0              xjmp L52
+ 0206           X43:
+ 0206           X18:
+ 0206 8DC1              xjmp L32
+ 0208           L38:
+ 0208           ; 				case 0:		// J4 取片检测开关信号
+ 0208           ; 					i = (PINL & 0x04);
+ 0208 60910901          lds R22,265
+ 020C 6470              andi R22,4
+ 020E           ;                                       if(i!=0)
+ 020E 09F0              breq L39
+ 0210           X19:
+ 0210           ; 						i = 1;
+ 0210 61E0              ldi R22,1
+ 0212           L39:
+ 0212           ; 					Uart0ReUnable;
+ 0212 8091C100          lds R24,193
+ 0216 8F7E              andi R24,239
+ 0218 8093C100          sts 193,R24
+ 021C           ;                                       uart_Printf("%s $%2d $%2d $%c\r\n",strM4201, slaveNum, num, s[i][0]);
+ 021C CE01              movw R24,R28
+ 021E 0696              adiw R24,6
+ 0220 E62F              mov R30,R22
+ 0222 FF27              clr R31
+ 0224 EE0F              lsl R30
+ 0226 FF1F              rol R31
+ 0228 E80F              add R30,R24
+ 022A F91F              adc R31,R25
+ 022C 2080              ldd R2,z+0
+ 022E 3324              clr R3
+ 0230 3D82              std y+5,R3
+ 0232 2C82              std y+4,R2
+ 0234 242E              mov R2,R20
+ 0236 3324              clr R3
+ 0238 3B82              std y+3,R3
+ 023A 2A82              std y+2,R2
+ 023C 2A2C              mov R2,R10
+ 023E 3324              clr R3
+ 0240 3982              std y+1,R3
+ 0242 2882              std y+0,R2
+ 0244 20E0              ldi R18,<_strM4201
+ 0246 30E0              ldi R19,>_strM4201
+ 0248 00E0              ldi R16,<L41
+ 024A 10E0              ldi R17,>L41
+ 024C 0E940000          xcall _uart_Printf
+ 0250           ;                                       Uart0ReEnable;
+ 0250 8091C100          lds R24,193
+ 0254 8061              ori R24,16
+ 0256 8093C100          sts 193,R24
+ 025A           ;                                       break;
+ 025A 63C1              xjmp L32
+ 025C           L42:
+ 025C           ; 				case 1:		// J7 转盘干片检测光藕信号
+ 025C           ; 					i = PINK & 0x01;
+ 025C 60910601          lds R22,262
+ 0260 6170              andi R22,1
+ 0262           ;                                       if(i!=0)
+ 0262 09F0              breq L43
+ 0264           X20:
+ 0264           ; 						i = 1;
+ 0264 61E0              ldi R22,1
+ 0266           L43:
+ 0266           ; 					Uart0ReUnable;
+ 0266 8091C100          lds R24,193
+ 026A 8F7E              andi R24,239
+ 026C 8093C100          sts 193,R24
+ 0270           ;                                       uart_Printf("%s $%2d $%2d $%c\r\n",strM4201, slaveNum, num, s[i][0]);
+ 0270 CE01              movw R24,R28
+ 0272 0696              adiw R24,6
+ 0274 E62F              mov R30,R22
+ 0276 FF27              clr R31
+ 0278 EE0F              lsl R30
+ 027A FF1F              rol R31
+ 027C E80F              add R30,R24
+ 027E F91F              adc R31,R25
+ 0280 2080              ldd R2,z+0
+ 0282 3324              clr R3
+ 0284 3D82              std y+5,R3
+ 0286 2C82              std y+4,R2
+ 0288 242E              mov R2,R20
+ 028A 3324              clr R3
+ 028C 3B82              std y+3,R3
+ 028E 2A82              std y+2,R2
+ 0290 2A2C              mov R2,R10
+ 0292 3324              clr R3
+ 0294 3982              std y+1,R3
+ 0296 2882              std y+0,R2
+ 0298 20E0              ldi R18,<_strM4201
+ 029A 30E0              ldi R19,>_strM4201
+ 029C 00E0              ldi R16,<L41
+ 029E 10E0              ldi R17,>L41
+ 02A0 0E940000          xcall _uart_Printf
+ 02A4           ;                                       Uart0ReEnable;
+ 02A4 8091C100          lds R24,193
+ 02A8 8061              ori R24,16
+ 02AA 8093C100          sts 193,R24
+ 02AE           ;                                       break;
+ 02AE 39C1              xjmp L32
+ 02B0           L45:
+ 02B0           ; 				case 2:		// J8 废片盒开关信号
+ 02B0           ; 					if(GetwasteCardState() == 0)// 废片仓功能开启
+ 02B0 0E940000          xcall _GetwasteCardState
+ 02B4 0023              tst R16
+ 02B6 09F0              breq X44
+ 02B8 34C1              xjmp L32
+ 02BA           X44:
+ 02BA           X21:
+ 02BA           ; 					{
+ 02BA           ; 						i = PINK & 0x02;
+ 02BA 60910601          lds R22,262
+ 02BE 6270              andi R22,2
+ 02C0           ;                                               if(i!=0)
+ 02C0 09F0              breq L48
+ 02C2           X22:
+ 02C2           ; 							i = 1;
+ 02C2 61E0              ldi R22,1
+ 02C4           L48:
+ 02C4           ; 						Uart0ReUnable;
+ 02C4 8091C100          lds R24,193
+ 02C8 8F7E              andi R24,239
+ 02CA 8093C100          sts 193,R24
+ 02CE           ;                                               uart_Printf("%s $%2d $%2d $%c\r\n",strM4201, slaveNum, num, s[i][0]);
+ 02CE CE01              movw R24,R28
+ 02D0 0696              adiw R24,6
+ 02D2 E62F              mov R30,R22
+ 02D4 FF27              clr R31
+ 02D6 EE0F              lsl R30
+ 02D8 FF1F              rol R31
+ 02DA E80F              add R30,R24
+ 02DC F91F              adc R31,R25
+ 02DE 2080              ldd R2,z+0
+ 02E0 3324              clr R3
+ 02E2 3D82              std y+5,R3
+ 02E4 2C82              std y+4,R2
+ 02E6 242E              mov R2,R20
+ 02E8 3324              clr R3
+ 02EA 3B82              std y+3,R3
+ 02EC 2A82              std y+2,R2
+ 02EE 2A2C              mov R2,R10
+ 02F0 3324              clr R3
+ 02F2 3982              std y+1,R3
+ 02F4 2882              std y+0,R2
+ 02F6 20E0              ldi R18,<_strM4201
+ 02F8 30E0              ldi R19,>_strM4201
+ 02FA 00E0              ldi R16,<L41
+ 02FC 10E0              ldi R17,>L41
+ 02FE 0E940000          xcall _uart_Printf
+ 0302           ;                                               Uart0ReEnable;
+ 0302 8091C100          lds R24,193
+ 0306 8061              ori R24,16
+ 0308 8093C100          sts 193,R24
+ 030C           ;                                       }
+ 030C           ;                                       break;
+ 030C 0AC1              xjmp L32
+ 030E           L50:
+ 030E           ; 				case 3:		// J10 液面传感器信号
+ 030E           ; 					Uart0ReUnable;
+ 030E 8091C100          lds R24,193
+ 0312 8F7E              andi R24,239
+ 0314 8093C100          sts 193,R24
+ 0318           ;                                       uart_Printf("%s $%2d $%2d $%4d\r\n",strM4201, slaveNum, num, getLiqDetADC(NeedleChannel));
+ 0318 0027              clr R16
+ 031A 0E940000          xcall _getLiqDetADC
+ 031E 1D83              std y+5,R17
+ 0320 0C83              std y+4,R16
+ 0322 242E              mov R2,R20
+ 0324 3324              clr R3
+ 0326 3B82              std y+3,R3
+ 0328 2A82              std y+2,R2
+ 032A 2A2C              mov R2,R10
+ 032C 3324              clr R3
+ 032E 3982              std y+1,R3
+ 0330 2882              std y+0,R2
+ 0332 20E0              ldi R18,<_strM4201
+ 0334 30E0              ldi R19,>_strM4201
+ 0336 00E0              ldi R16,<L51
+ 0338 10E0              ldi R17,>L51
+ 033A 0E940000          xcall _uart_Printf
+ 033E           ;                                       Uart0ReEnable;
+ 033E 8091C100          lds R24,193
+ 0342 8061              ori R24,16
+ 0344 8093C100          sts 193,R24
+ 0348           ;                                       break;
+ 0348 ECC0              xjmp L32
+ 034A           L52:
+ 034A           ; 				case 4:		// J12 吸样开关信号
+ 034A           ; 					i = PINJ & 0x40;
+ 034A 60910301          lds R22,259
+ 034E 6074              andi R22,64
+ 0350           ;                                       if(i!=0)
+ 0350 09F0              breq L53
+ 0352           X23:
+ 0352           ; 						i = 1;
+ 0352 61E0              ldi R22,1
+ 0354           L53:
+ 0354           ; 					Uart0ReUnable;
+ 0354 8091C100          lds R24,193
+ 0358 8F7E              andi R24,239
+ 035A 8093C100          sts 193,R24
+ 035E           ;                                       uart_Printf("%s $%2d $%2d $%c\r\n",strM4201, slaveNum, num, s[i][0]);
+ 035E CE01              movw R24,R28
+ 0360 0696              adiw R24,6
+ 0362 E62F              mov R30,R22
+ 0364 FF27              clr R31
+ 0366 EE0F              lsl R30
+ 0368 FF1F              rol R31
+ 036A E80F              add R30,R24
+ 036C F91F              adc R31,R25
+ 036E 2080              ldd R2,z+0
+ 0370 3324              clr R3
+ 0372 3D82              std y+5,R3
+ 0374 2C82              std y+4,R2
+ 0376 242E              mov R2,R20
+ 0378 3324              clr R3
+ 037A 3B82              std y+3,R3
+ 037C 2A82              std y+2,R2
+ 037E 2A2C              mov R2,R10
+ 0380 3324              clr R3
+ 0382 3982              std y+1,R3
+ 0384 2882              std y+0,R2
+ 0386 20E0              ldi R18,<_strM4201
+ 0388 30E0              ldi R19,>_strM4201
+ 038A 00E0              ldi R16,<L41
+ 038C 10E0              ldi R17,>L41
+ 038E 0E940000          xcall _uart_Printf
+ 0392           ;                                       Uart0ReEnable;
+ 0392 8091C100          lds R24,193
+ 0396 8061              ori R24,16
+ 0398 8093C100          sts 193,R24
+ 039C           ;                                       break;
+ 039C           ;                               }
+ 039C           ;                       break;
+ 039C C2C0              xjmp L32
+ 039E           L55:
+ 039E           ; 		case MOT_TURN_PLATE:
+ 039E           ; 		case MOT_SAMP_TRUN:
+ 039E           ; 		case MOT_SAMP_NEEDLE:
+ 039E           ; 		case MOT_CARD_LOAD:
+ 039E           ; 		case MOT_CARD_UNLOAD:
+ 039E           ; 		case MOT_STORE_CARD_MOVE:
+ 039E           ; 		case MOT_SAMP_PUMP:
+ 039E           ; 			if(num>1)
+ 039E 81E0              ldi R24,1
+ 03A0 8417              cp R24,R20
+ 03A2 08F4              brsh L56
+ 03A4           X24:
+ 03A4           ; 				num = 1;
+ 03A4 41E0              ldi R20,1
+ 03A6           L56:
+ 03A6           ; 			i = MotModulePhoSta[slaveNum][num];
+ 03A6 80E0              ldi R24,<_MotModulePhoSta
+ 03A8 90E0              ldi R25,>_MotModulePhoSta
+ 03AA 2A2C              mov R2,R10
+ 03AC 3324              clr R3
+ 03AE 220C              lsl R2
+ 03B0 331C              rol R3
+ 03B2 280E              add R2,R24
+ 03B4 391E              adc R3,R25
+ 03B6 E42F              mov R30,R20
+ 03B8 FF27              clr R31
+ 03BA E20D              add R30,R2
+ 03BC F31D              adc R31,R3
+ 03BE 6081              ldd R22,z+0
+ 03C0           ;                       if(i!=0)
+ 03C0 6623              tst R22
+ 03C2 09F0              breq L58
+ 03C4           X25:
+ 03C4           ; 				i = 1;
+ 03C4 61E0              ldi R22,1
+ 03C6           L58:
+ 03C6           ; 			// 发送电机模块光藕信号
+ 03C6           ; 			Uart0ReUnable;
+ 03C6 8091C100          lds R24,193
+ 03CA 8F7E              andi R24,239
+ 03CC 8093C100          sts 193,R24
+ 03D0           ;                       uart_Printf("%s $%2d $%2d $%c\r\n",strM4201, slaveNum, num, s[i][0]);
+ 03D0 CE01              movw R24,R28
+ 03D2 0696              adiw R24,6
+ 03D4 E62F              mov R30,R22
+ 03D6 FF27              clr R31
+ 03D8 EE0F              lsl R30
+ 03DA FF1F              rol R31
+ 03DC E80F              add R30,R24
+ 03DE F91F              adc R31,R25
+ 03E0 2080              ldd R2,z+0
+ 03E2 3324              clr R3
+ 03E4 3D82              std y+5,R3
+ 03E6 2C82              std y+4,R2
+ 03E8 242E              mov R2,R20
+ 03EA 3324              clr R3
+ 03EC 3B82              std y+3,R3
+ 03EE 2A82              std y+2,R2
+ 03F0 2A2C              mov R2,R10
+ 03F2 3324              clr R3
+ 03F4 3982              std y+1,R3
+ 03F6 2882              std y+0,R2
+ 03F8 20E0              ldi R18,<_strM4201
+ 03FA 30E0              ldi R19,>_strM4201
+ 03FC 00E0              ldi R16,<L41
+ 03FE 10E0              ldi R17,>L41
+ 0400 0E940000          xcall _uart_Printf
+ 0404           ;                       Uart0ReEnable;
+ 0404 8091C100          lds R24,193
+ 0408 8061              ori R24,16
+ 040A 8093C100          sts 193,R24
+ 040E           ;                       break;
+ 040E 89C0              xjmp L32
+ 0410           L60:
+ 0410           ; 		case LIQUID_CONTROL:
+ 0410           ; 			if(num>2)
+ 0410 82E0              ldi R24,2
+ 0412 8417              cp R24,R20
+ 0414 08F4              brsh L61
+ 0416           X26:
+ 0416           ; 				num = 2;
+ 0416 42E0              ldi R20,2
+ 0418           L61:
+ 0418           ; 			// 发送液路状态信号
+ 0418           ; 			if(LiquidState[num][0] == INFO_LIQ_FULL)
+ 0418 80E0              ldi R24,<_LiquidState
+ 041A 90E0              ldi R25,>_LiquidState
+ 041C E42F              mov R30,R20
+ 041E FF27              clr R31
+ 0420 EE0F              lsl R30
+ 0422 FF1F              rol R31
+ 0424 E80F              add R30,R24
+ 0426 F91F              adc R31,R25
+ 0428 8081              ldd R24,z+0
+ 042A 8F30              cpi R24,15
+ 042C 11F4              brne L63
+ 042E           X27:
+ 042E           ; 				i = 1;
+ 042E 61E0              ldi R22,1
+ 0430 01C0              xjmp L64
+ 0432           L63:
+ 0432           ; 			else
+ 0432           ; 				i = 0;
+ 0432 6627              clr R22
+ 0434           L64:
+ 0434           ; 			Uart0ReUnable;
+ 0434 8091C100          lds R24,193
+ 0438 8F7E              andi R24,239
+ 043A 8093C100          sts 193,R24
+ 043E           ;                       uart_Printf("%s $%2d $%2d $%c\r\n",strM4201, slaveNum, num, s[i][0]);
+ 043E CE01              movw R24,R28
+ 0440 0696              adiw R24,6
+ 0442 E62F              mov R30,R22
+ 0444 FF27              clr R31
+ 0446 EE0F              lsl R30
+ 0448 FF1F              rol R31
+ 044A E80F              add R30,R24
+ 044C F91F              adc R31,R25
+ 044E 2080              ldd R2,z+0
+ 0450 3324              clr R3
+ 0452 3D82              std y+5,R3
+ 0454 2C82              std y+4,R2
+ 0456 242E              mov R2,R20
+ 0458 3324              clr R3
+ 045A 3B82              std y+3,R3
+ 045C 2A82              std y+2,R2
+ 045E 2A2C              mov R2,R10
+ 0460 3324              clr R3
+ 0462 3982              std y+1,R3
+ 0464 2882              std y+0,R2
+ 0466 20E0              ldi R18,<_strM4201
+ 0468 30E0              ldi R19,>_strM4201
+ 046A 00E0              ldi R16,<L41
+ 046C 10E0              ldi R17,>L41
+ 046E 0E940000          xcall _uart_Printf
+ 0472           ;                       Uart0ReEnable;
+ 0472 8091C100          lds R24,193
+ 0476 8061              ori R24,16
+ 0478 8093C100          sts 193,R24
+ 047C           ;                       break;
+ 047C 52C0              xjmp L32
+ 047E           L65:
+ 047E           ; 		case STORE_MONITOR:
+ 047E           ; 			if(num>4)
+ 047E 84E0              ldi R24,4
+ 0480 8417              cp R24,R20
+ 0482 08F4              brsh L66
+ 0484           X28:
+ 0484           ; 				num = 4;
+ 0484 44E0              ldi R20,4
+ 0486           L66:
+ 0486           ; 			if(CardStoretate[num] == INFO_STORE_OPEN)
+ 0486 80E0              ldi R24,<_CardStoretate
+ 0488 90E0              ldi R25,>_CardStoretate
+ 048A E42F              mov R30,R20
+ 048C FF27              clr R31
+ 048E E80F              add R30,R24
+ 0490 F91F              adc R31,R25
+ 0492 8081              ldd R24,z+0
+ 0494 8431              cpi R24,20
+ 0496 19F5              brne L68
+ 0498           X29:
+ 0498           ; 			{
+ 0498           ; 				Uart0ReUnable;
+ 0498 8091C100          lds R24,193
+ 049C 8F7E              andi R24,239
+ 049E 8093C100          sts 193,R24
+ 04A2           ;                               uart_Printf("%s $%2d $%2d $%4d\r\n",strM4201, slaveNum, num, CardStoretate[num]);
+ 04A2 80E0              ldi R24,<_CardStoretate
+ 04A4 90E0              ldi R25,>_CardStoretate
+ 04A6 E42F              mov R30,R20
+ 04A8 FF27              clr R31
+ 04AA E80F              add R30,R24
+ 04AC F91F              adc R31,R25
+ 04AE 2080              ldd R2,z+0
+ 04B0 3324              clr R3
+ 04B2 3D82              std y+5,R3
+ 04B4 2C82              std y+4,R2
+ 04B6 242E              mov R2,R20
+ 04B8 3324              clr R3
+ 04BA 3B82              std y+3,R3
+ 04BC 2A82              std y+2,R2
+ 04BE 2A2C              mov R2,R10
+ 04C0 3324              clr R3
+ 04C2 3982              std y+1,R3
+ 04C4 2882              std y+0,R2
+ 04C6 20E0              ldi R18,<_strM4201
+ 04C8 30E0              ldi R19,>_strM4201
+ 04CA 00E0              ldi R16,<L51
+ 04CC 10E0              ldi R17,>L51
+ 04CE 0E940000          xcall _uart_Printf
+ 04D2           ;                               Uart0ReEnable;
+ 04D2 8091C100          lds R24,193
+ 04D6 8061              ori R24,16
+ 04D8 8093C100          sts 193,R24
+ 04DC           ;                       }
+ 04DC 22C0              xjmp L32
+ 04DE           L68:
+ 04DE           ; 			else
+ 04DE           ; 			{
+ 04DE           ; 				Uart0ReUnable;
+ 04DE 8091C100          lds R24,193
+ 04E2 8F7E              andi R24,239
+ 04E4 8093C100          sts 193,R24
+ 04E8           ;                               uart_Printf("%s $%2d $%2d $%4d\r\n",strM4201, slaveNum, num, CardSurplusState[num]);
+ 04E8 80E0              ldi R24,<_CardSurplusState
+ 04EA 90E0              ldi R25,>_CardSurplusState
+ 04EC E42F              mov R30,R20
+ 04EE FF27              clr R31
+ 04F0 E80F              add R30,R24
+ 04F2 F91F              adc R31,R25
+ 04F4 2080              ldd R2,z+0
+ 04F6 3324              clr R3
+ 04F8 3D82              std y+5,R3
+ 04FA 2C82              std y+4,R2
+ 04FC 242E              mov R2,R20
+ 04FE 3324              clr R3
+ 0500 3B82              std y+3,R3
+ 0502 2A82              std y+2,R2
+ 0504 2A2C              mov R2,R10
+ 0506 3324              clr R3
+ 0508 3982              std y+1,R3
+ 050A 2882              std y+0,R2
+ 050C 20E0              ldi R18,<_strM4201
+ 050E 30E0              ldi R19,>_strM4201
+ 0510 00E0              ldi R16,<L51
+ 0512 10E0              ldi R17,>L51
+ 0514 0E940000          xcall _uart_Printf
+ 0518           ;                               Uart0ReEnable;
+ 0518 8091C100          lds R24,193
+ 051C 8061              ori R24,16
+ 051E 8093C100          sts 193,R24
+ 0522           ;                       }
+ 0522           ;                       break;
+ 0522           ;               default:
+ 0522           ;                       break;
+ 0522           L32:
+ 0522           L29:
+ 0522                   .dbline 0 ; func end
+ 0522 2A96              adiw R28,10
+ 0524 0C940000          xjmp pop_xgsetF00C
+ 0528           ;            num -> R20
+ 0528           ;          slave -> R22
+                        .even
+ 0528           _GetMotorMonitorState::
+ 0528 0E940000          xcall push_xgsetF00C
+ 052C 422F              mov R20,R18
+ 052E 602F              mov R22,R16
+ 0530 2297              sbiw R28,2
+ 0532           ;               }
+ 0532           ; }
+ 0532           ; /*
+ 0532           ; unsigned char GetTurnPlateMonitorState(void)
+ 0532           ; {     
+ 0532           ;       Uart0ReUnable;
+ 0532           ;       uart_Printf("%s $%4d\r\n",strM3175,MotModulePhoSta[MOT_TURN_PLATE][1]);
+ 0532           ;       Uart0ReEnable;
+ 0532           ;       return MotModulePhoSta[MOT_TURN_PLATE][1];
+ 0532           ; }
+ 0532           ; */
+ 0532           ; 
+ 0532           ; signed char GetMotorMonitorState(unsigned char slave,unsigned char num)
+ 0532           ; {
+ 0532           ;       if(slave == 0 || slave == 6 || slave == 7)      
+ 0532 6623              tst R22
+ 0534 21F0              breq L74
+ 0536           X45:
+ 0536 6630              cpi R22,6
+ 0538 11F0              breq L74
+ 053A           X46:
+ 053A 6730              cpi R22,7
+ 053C 11F4              brne L71
+ 053E           X47:
+ 053E           L74:
+ 053E           ; 		return -1;
+ 053E 0FEF              ldi R16,255
+ 0540 B2C0              xjmp L70
+ 0542           L71:
+ 0542           ; 	if(num > 1)
+ 0542 81E0              ldi R24,1
+ 0544 8417              cp R24,R20
+ 0546 08F4              brsh L75
+ 0548           X48:
+ 0548           ; 		num = 1;
+ 0548 41E0              ldi R20,1
+ 054A           L75:
+ 054A           ; 	Uart0ReUnable;
+ 054A 8091C100          lds R24,193
+ 054E 8F7E              andi R24,239
+ 0550 8093C100          sts 193,R24
+ 0554           ;       uart_Printf("%s",strM3175);
+ 0554 20E0              ldi R18,<_strM3175
+ 0556 30E0              ldi R19,>_strM3175
+ 0558 00E0              ldi R16,<L77
+ 055A 10E0              ldi R17,>L77
+ 055C 0E940000          xcall _uart_Printf
+ 0560           ;       switch(slave)
+ 0560 A62E              mov R10,R22
+ 0562 BB24              clr R11
+ 0564 C501              movw R24,R10
+ 0566 8130              cpi R24,1
+ 0568 E0E0              ldi R30,0
+ 056A 9E07              cpc R25,R30
+ 056C 09F4              brne X61
+ 056E 38C0              xjmp L81
+ 0570           X61:
+ 0570           X49:
+ 0570 8230              cpi R24,2
+ 0572 E0E0              ldi R30,0
+ 0574 9E07              cpc R25,R30
+ 0576 09F4              brne X62
+ 0578 38C0              xjmp L83
+ 057A           X62:
+ 057A           X50:
+ 057A 8330              cpi R24,3
+ 057C E0E0              ldi R30,0
+ 057E 9E07              cpc R25,R30
+ 0580 09F4              brne X63
+ 0582 38C0              xjmp L85
+ 0584           X63:
+ 0584           X51:
+ 0584 8430              cpi R24,4
+ 0586 E0E0              ldi R30,0
+ 0588 9E07              cpc R25,R30
+ 058A 09F4              brne X64
+ 058C 38C0              xjmp L87
+ 058E           X64:
+ 058E           X52:
+ 058E 8530              cpi R24,5
+ 0590 E0E0              ldi R30,0
+ 0592 9E07              cpc R25,R30
+ 0594 09F4              brne X65
+ 0596 38C0              xjmp L89
+ 0598           X65:
+ 0598           X53:
+ 0598 8830              cpi R24,8
+ 059A E0E0              ldi R30,0
+ 059C 9E07              cpc R25,R30
+ 059E 09F4              brne X66
+ 05A0 38C0              xjmp L91
+ 05A2           X66:
+ 05A2           X54:
+ 05A2 8930              cpi R24,9
+ 05A4 E0E0              ldi R30,0
+ 05A6 9E07              cpc R25,R30
+ 05A8 09F4              brne X67
+ 05AA 38C0              xjmp L93
+ 05AC           X67:
+ 05AC           X55:
+ 05AC 8A30              cpi R24,10
+ 05AE E0E0              ldi R30,0
+ 05B0 9E07              cpc R25,R30
+ 05B2 09F4              brne X68
+ 05B4 38C0              xjmp L95
+ 05B6           X68:
+ 05B6           X56:
+ 05B6 8B30              cpi R24,11
+ 05B8 E0E0              ldi R30,0
+ 05BA 9E07              cpc R25,R30
+ 05BC 09F4              brne X69
+ 05BE 38C0              xjmp L97
+ 05C0           X69:
+ 05C0           X57:
+ 05C0 8C30              cpi R24,12
+ 05C2 E0E0              ldi R30,0
+ 05C4 9E07              cpc R25,R30
+ 05C6 09F4              brne X70
+ 05C8 38C0              xjmp L99
+ 05CA           X70:
+ 05CA           X58:
+ 05CA 8D30              cpi R24,13
+ 05CC E0E0              ldi R30,0
+ 05CE 9E07              cpc R25,R30
+ 05D0 09F4              brne X71
+ 05D2 38C0              xjmp L101
+ 05D4           X71:
+ 05D4           X59:
+ 05D4 8E30              cpi R24,14
+ 05D6 E0E0              ldi R30,0
+ 05D8 9E07              cpc R25,R30
+ 05DA 09F4              brne X72
+ 05DC 38C0              xjmp L103
+ 05DE           X72:
+ 05DE           X60:
+ 05DE 3BC0              xjmp L79
+ 05E0           L81:
+ 05E0           ; 	{
+ 05E0           ; 		case 1:uart_Printf(":MOT_TURN_PLATE");break;
+ 05E0 00E0              ldi R16,<L82
+ 05E2 10E0              ldi R17,>L82
+ 05E4 0E940000          xcall _uart_Printf
+ 05E8 36C0              xjmp L79
+ 05EA           L83:
+ 05EA           ; 		case 2:uart_Printf(":MOT_SAMP_TRUN");break;
+ 05EA 00E0              ldi R16,<L84
+ 05EC 10E0              ldi R17,>L84
+ 05EE 0E940000          xcall _uart_Printf
+ 05F2 31C0              xjmp L79
+ 05F4           L85:
+ 05F4           ; 		case 3:uart_Printf(":MOT_SAMP_NEEDLE");break;
+ 05F4 00E0              ldi R16,<L86
+ 05F6 10E0              ldi R17,>L86
+ 05F8 0E940000          xcall _uart_Printf
+ 05FC 2CC0              xjmp L79
+ 05FE           L87:
+ 05FE           ; 		case 4:uart_Printf(":MOT_CARD_LOAD");break;
+ 05FE 00E0              ldi R16,<L88
+ 0600 10E0              ldi R17,>L88
+ 0602 0E940000          xcall _uart_Printf
+ 0606 27C0              xjmp L79
+ 0608           L89:
+ 0608           ; 		case 5:uart_Printf(":MOT_CARD_UNLOAD");break;
+ 0608 00E0              ldi R16,<L90
+ 060A 10E0              ldi R17,>L90
+ 060C 0E940000          xcall _uart_Printf
+ 0610 22C0              xjmp L79
+ 0612           L91:
+ 0612           ; 		case 8:uart_Printf(":MOT_STORE_CARD_MOVE");break;
+ 0612 00E0              ldi R16,<L92
+ 0614 10E0              ldi R17,>L92
+ 0616 0E940000          xcall _uart_Printf
+ 061A 1DC0              xjmp L79
+ 061C           L93:
+ 061C           ; 		case 9:uart_Printf(":MOT_DILUENT");break;
+ 061C 00E0              ldi R16,<L94
+ 061E 10E0              ldi R17,>L94
+ 0620 0E940000          xcall _uart_Printf
+ 0624 18C0              xjmp L79
+ 0626           L95:
+ 0626           ; 		case 10:uart_Printf(":MOT_FLUID");break;
+ 0626 00E0              ldi R16,<L96
+ 0628 10E0              ldi R17,>L96
+ 062A 0E940000          xcall _uart_Printf
+ 062E 13C0              xjmp L79
+ 0630           L97:
+ 0630           ; 		case 11:uart_Printf(":MOT_EFFLUENT");break;
+ 0630 00E0              ldi R16,<L98
+ 0632 10E0              ldi R17,>L98
+ 0634 0E940000          xcall _uart_Printf
+ 0638 0EC0              xjmp L79
+ 063A           L99:
+ 063A           ; 		case 12:uart_Printf(":MOT_SAMP_PUMP");break;
+ 063A 00E0              ldi R16,<L100
+ 063C 10E0              ldi R17,>L100
+ 063E 0E940000          xcall _uart_Printf
+ 0642 09C0              xjmp L79
+ 0644           L101:
+ 0644           ; 		case 13:uart_Printf(":LIQUID_CONTROL");break;
+ 0644 00E0              ldi R16,<L102
+ 0646 10E0              ldi R17,>L102
+ 0648 0E940000          xcall _uart_Printf
+ 064C 04C0              xjmp L79
+ 064E           L103:
+ 064E           ; 		case 14:uart_Printf(":STORE_MONITOR");break;
+ 064E 00E0              ldi R16,<L104
+ 0650 10E0              ldi R17,>L104
+ 0652 0E940000          xcall _uart_Printf
+ 0656           ;               default:break;
+ 0656           L79:
+ 0656           ; 	}
+ 0656           ; 	uart_Printf("$%2d $%2d\r\n",num,MotModulePhoSta[slave][num]);
+ 0656 80E0              ldi R24,<_MotModulePhoSta
+ 0658 90E0              ldi R25,>_MotModulePhoSta
+ 065A 262E              mov R2,R22
+ 065C 3324              clr R3
+ 065E 220C              lsl R2
+ 0660 331C              rol R3
+ 0662 280E              add R2,R24
+ 0664 391E              adc R3,R25
+ 0666 E42F              mov R30,R20
+ 0668 FF27              clr R31
+ 066A E20D              add R30,R2
+ 066C F31D              adc R31,R3
+ 066E 2080              ldd R2,z+0
+ 0670 3324              clr R3
+ 0672 3982              std y+1,R3
+ 0674 2882              std y+0,R2
+ 0676 242F              mov R18,R20
+ 0678 3327              clr R19
+ 067A 00E0              ldi R16,<L105
+ 067C 10E0              ldi R17,>L105
+ 067E 0E940000          xcall _uart_Printf
+ 0682           ;       //uart_Printf("%s:%s.%s $%2d\r\n",strM3175,SlaveID[slave],Monitor[num],MotModulePhoSta[MOT_TURN_PLATE][num]);
+ 0682           ;       Uart0ReEnable;
+ 0682 8091C100          lds R24,193
+ 0686 8061              ori R24,16
+ 0688 8093C100          sts 193,R24
+ 068C           ;       return MotModulePhoSta[slave][num];
+ 068C 80E0              ldi R24,<_MotModulePhoSta
+ 068E 90E0              ldi R25,>_MotModulePhoSta
+ 0690 262E              mov R2,R22
+ 0692 3324              clr R3
+ 0694 220C              lsl R2
+ 0696 331C              rol R3
+ 0698 280E              add R2,R24
+ 069A 391E              adc R3,R25
+ 069C E42F              mov R30,R20
+ 069E FF27              clr R31
+ 06A0 E20D              add R30,R2
+ 06A2 F31D              adc R31,R3
+ 06A4 0081              ldd R16,z+0
+ 06A6           L70:
+ 06A6                   .dbline 0 ; func end
+ 06A6 2296              adiw R28,2
+ 06A8 0C940000          xjmp pop_xgsetF00C
+                        .area data(ram, con, rel)
+ 0005           L107:
+ 0005                   .blkb 2
+                        .area idata
+ 0005 3000              .byte 48,0
+                        .area data(ram, con, rel)
+ 0007                   .blkb 2
+                        .area idata
+ 0007 3100              .byte 49,0
+                        .area data(ram, con, rel)
+                        .area text(rom, con, rel)
+                ;              s -> y+0
+                ;              i -> R10
+                ;              f -> R22
+                ;              n -> R20
+                        .even
+ 06AC           _UpLoadingAllSensorState::
+ 06AC 0E940000          xcall push_xgsetF00C
+ 06B0 2497              sbiw R28,4
+ 06B2           ; }
+ 06B2           ; 
+ 06B2           ; // 上传所有传感器信息
+ 06B2           ; void UpLoadingAllSensorState(void){
+ 06B2           ;       char s[2][2] = {"0","1"};
+ 06B2 80E0              ldi R24,<L107
+ 06B4 90E0              ldi R25,>L107
+ 06B6 FE01              movw R30,R28
+ 06B8 04E0              ldi R16,4
+ 06BA 10E0              ldi R17,0
+ 06BC FA93              st -y,R31
+ 06BE EA93              st -y,R30
+ 06C0 9A93              st -y,R25
+ 06C2 8A93              st -y,R24
+ 06C4 0E940000          xcall asgnblk
+ 06C8           ;       unsigned char i,n, f;
+ 06C8           ;       Uart0ReUnable;
+ 06C8 8091C100          lds R24,193
+ 06CC 8F7E              andi R24,239
+ 06CE 8093C100          sts 193,R24
+ 06D2           ;       uart_Printf("%s",strM4202);     // 发送开始
+ 06D2 20E0              ldi R18,<_strM4202
+ 06D4 30E0              ldi R19,>_strM4202
+ 06D6 00E0              ldi R16,<L77
+ 06D8 10E0              ldi R17,>L77
+ 06DA 0E940000          xcall _uart_Printf
+ 06DE           ;       Uart0ReEnable;
+ 06DE 8091C100          lds R24,193
+ 06E2 8061              ori R24,16
+ 06E4 8093C100          sts 193,R24
+ 06E8           ;       // 发送电机模块光藕信息
+ 06E8           ;       for(i=1; i<=12; i++)
+ 06E8 AA24              clr R10
+ 06EA A394              inc R10
+ 06EC 33C0              xjmp L111
+ 06EE           L108:
+ 06EE           ; 	{
+ 06EE           ; 		if(i==6 || i==7)
+ 06EE 8A2D              mov R24,R10
+ 06F0 8630              cpi R24,6
+ 06F2 11F0              breq L114
+ 06F4           X73:
+ 06F4 8730              cpi R24,7
+ 06F6 09F4              brne L112
+ 06F8           X74:
+ 06F8           L114:
+ 06F8           ; 			continue;
+ 06F8 2CC0              xjmp L109
+ 06FA           L112:
+ 06FA           ; 		for(n=0; n<2; n++)
+ 06FA 4427              clr R20
+ 06FC 28C0              xjmp L118
+ 06FE           L115:
+ 06FE           ; 		{
+ 06FE           ; 			f = MotModulePhoSta[i][n];
+ 06FE 80E0              ldi R24,<_MotModulePhoSta
+ 0700 90E0              ldi R25,>_MotModulePhoSta
+ 0702 2A2C              mov R2,R10
+ 0704 3324              clr R3
+ 0706 220C              lsl R2
+ 0708 331C              rol R3
+ 070A 280E              add R2,R24
+ 070C 391E              adc R3,R25
+ 070E E42F              mov R30,R20
+ 0710 FF27              clr R31
+ 0712 E20D              add R30,R2
+ 0714 F31D              adc R31,R3
+ 0716 6081              ldd R22,z+0
+ 0718           ;                       if(f!=0)
+ 0718 6623              tst R22
+ 071A 09F0              breq L119
+ 071C           X75:
+ 071C           ; 				f = 1;
+ 071C 61E0              ldi R22,1
+ 071E           L119:
+ 071E           ; 			// 发送电机模块光藕信号
+ 071E           ; 			Uart0ReUnable;
+ 071E 8091C100          lds R24,193
+ 0722 8F7E              andi R24,239
+ 0724 8093C100          sts 193,R24
+ 0728           ;                       uart_Printf(" $%c",s[f][0]);
+ 0728 CE01              movw R24,R28
+ 072A E62F              mov R30,R22
+ 072C FF27              clr R31
+ 072E EE0F              lsl R30
+ 0730 FF1F              rol R31
+ 0732 E80F              add R30,R24
+ 0734 F91F              adc R31,R25
+ 0736 2081              ldd R18,z+0
+ 0738 3327              clr R19
+ 073A 00E0              ldi R16,<L121
+ 073C 10E0              ldi R17,>L121
+ 073E 0E940000          xcall _uart_Printf
+ 0742           ;                       Uart0ReEnable;
+ 0742 8091C100          lds R24,193
+ 0746 8061              ori R24,16
+ 0748 8093C100          sts 193,R24
+ 074C           ;               }
+ 074C           L116:
+ 074C 4395              inc R20
+ 074E           L118:
+ 074E 4230              cpi R20,2
+ 0750 B0F2              brlo L115
+ 0752           X76:
+ 0752           ; 	}
+ 0752           L109:
+ 0752 A394              inc R10
+ 0754           L111:
+ 0754 8CE0              ldi R24,12
+ 0756 8A15              cp R24,R10
+ 0758 08F0              brlo X93
+ 075A C9CF              xjmp L108
+ 075C           X93:
+ 075C           X77:
+ 075C           ; 	// 发送液路模块信息
+ 075C           ; 	i = 13;
+ 075C 8DE0              ldi R24,13
+ 075E A82E              mov R10,R24
+ 0760           ;       for(n=0; n<3; n++)
+ 0760 4427              clr R20
+ 0762 26C0              xjmp L125
+ 0764           L122:
+ 0764           ; 	{
+ 0764           ; 		if(LiquidState[n][0] == INFO_LIQ_FULL)
+ 0764 80E0              ldi R24,<_LiquidState
+ 0766 90E0              ldi R25,>_LiquidState
+ 0768 E42F              mov R30,R20
+ 076A FF27              clr R31
+ 076C EE0F              lsl R30
+ 076E FF1F              rol R31
+ 0770 E80F              add R30,R24
+ 0772 F91F              adc R31,R25
+ 0774 8081              ldd R24,z+0
+ 0776 8F30              cpi R24,15
+ 0778 11F4              brne L126
+ 077A           X78:
+ 077A           ; 			f = 1;
+ 077A 61E0              ldi R22,1
+ 077C 01C0              xjmp L127
+ 077E           L126:
+ 077E           ; 		else
+ 077E           ; 			f = 0;
+ 077E 6627              clr R22
+ 0780           L127:
+ 0780           ; 		Uart0ReUnable;
+ 0780 8091C100          lds R24,193
+ 0784 8F7E              andi R24,239
+ 0786 8093C100          sts 193,R24
+ 078A           ;               uart_Printf(" $%c",s[f][0]);
+ 078A CE01              movw R24,R28
+ 078C E62F              mov R30,R22
+ 078E FF27              clr R31
+ 0790 EE0F              lsl R30
+ 0792 FF1F              rol R31
+ 0794 E80F              add R30,R24
+ 0796 F91F              adc R31,R25
+ 0798 2081              ldd R18,z+0
+ 079A 3327              clr R19
+ 079C 00E0              ldi R16,<L121
+ 079E 10E0              ldi R17,>L121
+ 07A0 0E940000          xcall _uart_Printf
+ 07A4           ;               Uart0ReEnable;
+ 07A4 8091C100          lds R24,193
+ 07A8 8061              ori R24,16
+ 07AA 8093C100          sts 193,R24
+ 07AE           ;       }
+ 07AE           L123:
+ 07AE 4395              inc R20
+ 07B0           L125:
+ 07B0 4330              cpi R20,3
+ 07B2 C0F2              brlo L122
+ 07B4           X79:
+ 07B4           ; 	// 发送片仓模块信息
+ 07B4           ; 	i = 14;
+ 07B4 8EE0              ldi R24,14
+ 07B6 A82E              mov R10,R24
+ 07B8           ;       for(n=0; n<5; n++){
+ 07B8 4427              clr R20
+ 07BA 37C0              xjmp L131
+ 07BC           L128:
+ 07BC           ; 		if(CardStoretate[n] == INFO_STORE_OPEN)
+ 07BC 80E0              ldi R24,<_CardStoretate
+ 07BE 90E0              ldi R25,>_CardStoretate
+ 07C0 E42F              mov R30,R20
+ 07C2 FF27              clr R31
+ 07C4 E80F              add R30,R24
+ 07C6 F91F              adc R31,R25
+ 07C8 8081              ldd R24,z+0
+ 07CA 8431              cpi R24,20
+ 07CC B9F4              brne L132
+ 07CE           X80:
+ 07CE           ; 		{
+ 07CE           ; 			Uart0ReUnable;
+ 07CE 8091C100          lds R24,193
+ 07D2 8F7E              andi R24,239
+ 07D4 8093C100          sts 193,R24
+ 07D8           ;                       uart_Printf(" $%2d",CardStoretate[n]);
+ 07D8 80E0              ldi R24,<_CardStoretate
+ 07DA 90E0              ldi R25,>_CardStoretate
+ 07DC E42F              mov R30,R20
+ 07DE FF27              clr R31
+ 07E0 E80F              add R30,R24
+ 07E2 F91F              adc R31,R25
+ 07E4 2081              ldd R18,z+0
+ 07E6 3327              clr R19
+ 07E8 00E0              ldi R16,<L134
+ 07EA 10E0              ldi R17,>L134
+ 07EC 0E940000          xcall _uart_Printf
+ 07F0           ;                       Uart0ReEnable;
+ 07F0 8091C100          lds R24,193
+ 07F4 8061              ori R24,16
+ 07F6 8093C100          sts 193,R24
+ 07FA           ;               }
+ 07FA 16C0              xjmp L133
+ 07FC           L132:
+ 07FC           ; 		else
+ 07FC           ; 		{
+ 07FC           ; 			Uart0ReUnable;
+ 07FC 8091C100          lds R24,193
+ 0800 8F7E              andi R24,239
+ 0802 8093C100          sts 193,R24
+ 0806           ;                       uart_Printf(" $%2d",CardSurplusState[n]);
+ 0806 80E0              ldi R24,<_CardSurplusState
+ 0808 90E0              ldi R25,>_CardSurplusState
+ 080A E42F              mov R30,R20
+ 080C FF27              clr R31
+ 080E E80F              add R30,R24
+ 0810 F91F              adc R31,R25
+ 0812 2081              ldd R18,z+0
+ 0814 3327              clr R19
+ 0816 00E0              ldi R16,<L134
+ 0818 10E0              ldi R17,>L134
+ 081A 0E940000          xcall _uart_Printf
+ 081E           ;                       Uart0ReEnable;
+ 081E 8091C100          lds R24,193
+ 0822 8061              ori R24,16
+ 0824 8093C100          sts 193,R24
+ 0828           ;               }
+ 0828           L133:
+ 0828           ; 	}
+ 0828           L129:
+ 0828 4395              inc R20
+ 082A           L131:
+ 082A 4530              cpi R20,5
+ 082C 08F4              brsh X94
+ 082E C6CF              xjmp L128
+ 0830           X94:
+ 0830           X81:
+ 0830           ; 	//发送其它模块信息
+ 0830           ; 	i = 0;
+ 0830 AA24              clr R10
+ 0832           ;       for(n=0; n<5; n++){
+ 0832 4427              clr R20
+ 0834 A7C0              xjmp L138
+ 0836           L135:
+ 0836           ; 		switch(n){
+ 0836 A42E              mov R10,R20
+ 0838 BB24              clr R11
+ 083A AA20              tst R10
+ 083C 11F4              brne X82
+ 083E BB20              tst R11
+ 0840 A9F0              breq L142
+ 0842           X82:
+ 0842 C501              movw R24,R10
+ 0844 8130              cpi R24,1
+ 0846 E0E0              ldi R30,0
+ 0848 9E07              cpc R25,R30
+ 084A 69F1              breq L145
+ 084C           X83:
+ 084C 8230              cpi R24,2
+ 084E E0E0              ldi R30,0
+ 0850 9E07              cpc R25,R30
+ 0852 09F4              brne X95
+ 0854 45C0              xjmp L148
+ 0856           X95:
+ 0856           X84:
+ 0856 8330              cpi R24,3
+ 0858 E0E0              ldi R30,0
+ 085A 9E07              cpc R25,R30
+ 085C 09F4              brne X96
+ 085E 62C0              xjmp L153
+ 0860           X96:
+ 0860           X85:
+ 0860 8430              cpi R24,4
+ 0862 E0E0              ldi R30,0
+ 0864 9E07              cpc R25,R30
+ 0866 09F4              brne X97
+ 0868 70C0              xjmp L155
+ 086A           X97:
+ 086A           X86:
+ 086A 8BC0              xjmp L139
+ 086C           L142:
+ 086C           ; 			case 0:		// J4 取片检测开关信号
+ 086C           ; 				f = (PINL & 0x04);
+ 086C 60910901          lds R22,265
+ 0870 6470              andi R22,4
+ 0872           ;                               if(f!=0)
+ 0872 09F0              breq L143
+ 0874           X87:
+ 0874           ; 					f = 1;
+ 0874 61E0              ldi R22,1
+ 0876           L143:
+ 0876           ; 				Uart0ReUnable;
+ 0876 8091C100          lds R24,193
+ 087A 8F7E              andi R24,239
+ 087C 8093C100          sts 193,R24
+ 0880           ;                               uart_Printf(" $%c",s[f][0]);
+ 0880 CE01              movw R24,R28
+ 0882 E62F              mov R30,R22
+ 0884 FF27              clr R31
+ 0886 EE0F              lsl R30
+ 0888 FF1F              rol R31
+ 088A E80F              add R30,R24
+ 088C F91F              adc R31,R25
+ 088E 2081              ldd R18,z+0
+ 0890 3327              clr R19
+ 0892 00E0              ldi R16,<L121
+ 0894 10E0              ldi R17,>L121
+ 0896 0E940000          xcall _uart_Printf
+ 089A           ;                               Uart0ReEnable;
+ 089A 8091C100          lds R24,193
+ 089E 8061              ori R24,16
+ 08A0 8093C100          sts 193,R24
+ 08A4           ;                               break;
+ 08A4 6EC0              xjmp L140
+ 08A6           L145:
+ 08A6           ; 			case 1:		// J7 转盘干片检测光藕信号
+ 08A6           ; 				f = PINK & 0x01;
+ 08A6 60910601          lds R22,262
+ 08AA 6170              andi R22,1
+ 08AC           ;                               if(f!=0)
+ 08AC 09F0              breq L146
+ 08AE           X88:
+ 08AE           ; 					f = 1;
+ 08AE 61E0              ldi R22,1
+ 08B0           L146:
+ 08B0           ; 				Uart0ReUnable;
+ 08B0 8091C100          lds R24,193
+ 08B4 8F7E              andi R24,239
+ 08B6 8093C100          sts 193,R24
+ 08BA           ;                               uart_Printf(" $%c",s[f][0]);
+ 08BA CE01              movw R24,R28
+ 08BC E62F              mov R30,R22
+ 08BE FF27              clr R31
+ 08C0 EE0F              lsl R30
+ 08C2 FF1F              rol R31
+ 08C4 E80F              add R30,R24
+ 08C6 F91F              adc R31,R25
+ 08C8 2081              ldd R18,z+0
+ 08CA 3327              clr R19
+ 08CC 00E0              ldi R16,<L121
+ 08CE 10E0              ldi R17,>L121
+ 08D0 0E940000          xcall _uart_Printf
+ 08D4           ;                               Uart0ReEnable;
+ 08D4 8091C100          lds R24,193
+ 08D8 8061              ori R24,16
+ 08DA 8093C100          sts 193,R24
+ 08DE           ;                               break;
+ 08DE 51C0              xjmp L140
+ 08E0           L148:
+ 08E0           ; 			case 2:		// J8 废片盒开关信号
+ 08E0           ; 				if(GetwasteCardState() == 0)
+ 08E0 0E940000          xcall _GetwasteCardState
+ 08E4 0023              tst R16
+ 08E6 09F0              breq X98
+ 08E8 4CC0              xjmp L140
+ 08EA           X98:
+ 08EA           X89:
+ 08EA           ; 				{
+ 08EA           ; 					f = PINK & 0x02;
+ 08EA 60910601          lds R22,262
+ 08EE 6270              andi R22,2
+ 08F0           ;                                       if(f!=0)
+ 08F0 09F0              breq L151
+ 08F2           X90:
+ 08F2           ; 						f = 1;
+ 08F2 61E0              ldi R22,1
+ 08F4           L151:
+ 08F4           ; 					Uart0ReUnable;
+ 08F4 8091C100          lds R24,193
+ 08F8 8F7E              andi R24,239
+ 08FA 8093C100          sts 193,R24
+ 08FE           ;                                       uart_Printf(" $%c",s[f][0]);
+ 08FE CE01              movw R24,R28
+ 0900 E62F              mov R30,R22
+ 0902 FF27              clr R31
+ 0904 EE0F              lsl R30
+ 0906 FF1F              rol R31
+ 0908 E80F              add R30,R24
+ 090A F91F              adc R31,R25
+ 090C 2081              ldd R18,z+0
+ 090E 3327              clr R19
+ 0910 00E0              ldi R16,<L121
+ 0912 10E0              ldi R17,>L121
+ 0914 0E940000          xcall _uart_Printf
+ 0918           ;                                       Uart0ReEnable;
+ 0918 8091C100          lds R24,193
+ 091C 8061              ori R24,16
+ 091E 8093C100          sts 193,R24
+ 0922           ;                               }
+ 0922           ;                               break;
+ 0922 2FC0              xjmp L140
+ 0924           L153:
+ 0924           ; 			case 3:		// J10 液面传感器信号
+ 0924           ; 				Uart0ReUnable;
+ 0924 8091C100          lds R24,193
+ 0928 8F7E              andi R24,239
+ 092A 8093C100          sts 193,R24
+ 092E           ;                               uart_Printf(" $%4d",getLiqDetADC(NeedleChannel));
+ 092E 0027              clr R16
+ 0930 0E940000          xcall _getLiqDetADC
+ 0934 9801              movw R18,R16
+ 0936 00E0              ldi R16,<L154
+ 0938 10E0              ldi R17,>L154
+ 093A 0E940000          xcall _uart_Printf
+ 093E           ;                               Uart0ReEnable;
+ 093E 8091C100          lds R24,193
+ 0942 8061              ori R24,16
+ 0944 8093C100          sts 193,R24
+ 0948           ;                               break;
+ 0948 1CC0              xjmp L140
+ 094A           L155:
+ 094A           ; 			case 4:		// J12 吸样开关信号
+ 094A           ; 				f = PINJ & 0x40;
+ 094A 60910301          lds R22,259
+ 094E 6074              andi R22,64
+ 0950           ;                               if(f!=0)
+ 0950 09F0              breq L156
+ 0952           X91:
+ 0952           ; 					f = 1;
+ 0952 61E0              ldi R22,1
+ 0954           L156:
+ 0954           ; 				Uart0ReUnable;
+ 0954 8091C100          lds R24,193
+ 0958 8F7E              andi R24,239
+ 095A 8093C100          sts 193,R24
+ 095E           ;                               uart_Printf(" $%c",s[f][0]);
+ 095E CE01              movw R24,R28
+ 0960 E62F              mov R30,R22
+ 0962 FF27              clr R31
+ 0964 EE0F              lsl R30
+ 0966 FF1F              rol R31
+ 0968 E80F              add R30,R24
+ 096A F91F              adc R31,R25
+ 096C 2081              ldd R18,z+0
+ 096E 3327              clr R19
+ 0970 00E0              ldi R16,<L121
+ 0972 10E0              ldi R17,>L121
+ 0974 0E940000          xcall _uart_Printf
+ 0978           ;                               Uart0ReEnable;
+ 0978 8091C100          lds R24,193
+ 097C 8061              ori R24,16
+ 097E 8093C100          sts 193,R24
+ 0982           ;                               break;
+ 0982           L139:
+ 0982           L140:
+ 0982           ; 			}
+ 0982           ; 		}
+ 0982           L136:
+ 0982 4395              inc R20
+ 0984           L138:
+ 0984 4530              cpi R20,5
+ 0986 08F4              brsh X99
+ 0988 56CF              xjmp L135
+ 098A           X99:
+ 098A           X92:
+ 098A           ; 	uart_Printf("\r\n");	// 发送结束
+ 098A 00E0              ldi R16,<L158
+ 098C 10E0              ldi R17,>L158
+ 098E 0E940000          xcall _uart_Printf
+ 0992           L106:
+ 0992                   .dbline 0 ; func end
+ 0992 2496              adiw R28,4
+ 0994 0C940000          xjmp pop_xgsetF00C
+                        .area bss(ram, con, rel)
+ 0000           L160:
+ 0000                   .blkb 1
+                        .area text(rom, con, rel)
+                        .area  func_lit(rom, con, rel)
+ 0000           L201:
+ 0000 EF04              .word `L164
+ 0002 EF04              .word `L164
+ 0004 2305              .word `L170
+ 0006 F205              .word `L162
+ 0008 F205              .word `L162
+ 000A F205              .word `L162
+ 000C F205              .word `L162
+ 000E F205              .word `L162
+ 0010 F205              .word `L162
+ 0012 6905              .word `L179
+ 0014 6905              .word `L179
+ 0016 6905              .word `L179
+ 0018 6905              .word `L179
+ 001A 3505              .word `L171
+ 001C 3505              .word `L171
+ 001E 4E05              .word `L175
+ 0020 4E05              .word `L175
+ 0022 F205              .word `L162
+ 0024 F205              .word `L162
+ 0026 A105              .word `L192
+ 0028 A105              .word `L192
+ 002A A105              .word `L192
+ 002C A105              .word `L192
+ 002E A105              .word `L192
+ 0030 A105              .word `L192
+ 0032 A105              .word `L192
+ 0034 F205              .word `L162
+ 0036 A105              .word `L192
+ 0038 A105              .word `L192
+ 003A A105              .word `L192
+ 003C BD05              .word `L197
+ 003E DD05              .word `L199
+                        .area text(rom, con, rel)
+                ;              j -> <dead>
+                ;              p -> <dead>
+                ;        infoLen -> <dead>
+                ;            pos -> R22,R23
+                ;              i -> R22
+                ;       curSlave -> R14
+                ;          pInfo -> R20,R21
+                ;           even -> R12
+                ;     pInfoEvent -> R10,R11
+                        .even
+ 0998           _SlaveEventAssignProcess::
+ 0998 0E940000          xcall push_xgsetF0FC
+ 099C 5801              movw R10,R16
+ 099E 2497              sbiw R28,4
+ 09A0           ; }
+ 09A0           ; 
+ 09A0           ; // 从机事件处理和分配
+ 09A0           ; void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
+ 09A0           ;       // 事件分配处理
+ 09A0           ;       unsigned char curSlave, infoLen;
+ 09A0           ;       unsigned char * pInfo, *p;
+ 09A0           ;       int pos;
+ 09A0           ;       unsigned char even;
+ 09A0           ;       unsigned char i, j;
+ 09A0           ;       static unsigned char pieceState;
+ 09A0           ; 
+ 09A0           ;       curSlave = pInfoEvent->slaveNum;
+ 09A0 F501              movw R30,R10
+ 09A2 E080              ldd R14,z+0
+ 09A4           ;       even = pInfoEvent->event;
+ 09A4 C180              ldd R12,z+1
+ 09A6           ;       pInfo = &(pInfoEvent->info[0]);
+ 09A6 AF01              movw R20,R30
+ 09A8 4E5F              subi R20,254  ; offset = 2
+ 09AA 5F4F              sbci R21,255
+ 09AC           ;       
+ 09AC           ;       switch(even)
+ 09AC 6C2D              mov R22,R12
+ 09AE 7727              clr R23
+ 09B0 6130              cpi R22,1
+ 09B2 E0E0              ldi R30,0
+ 09B4 7E07              cpc R23,R30
+ 09B6 0CF4              brge X115
+ 09B8 15C1              xjmp L162
+ 09BA           X115:
+ 09BA           X100:
+ 09BA 80E2              ldi R24,32
+ 09BC 90E0              ldi R25,0
+ 09BE 8617              cp R24,R22
+ 09C0 9707              cpc R25,R23
+ 09C2 0CF4              brge X116
+ 09C4 0FC1              xjmp L162
+ 09C6           X116:
+ 09C6           X101:
+ 09C6 80E0              ldi R24,<L201
+ 09C8 90E0              ldi R25,>L201
+ 09CA FB01              movw R30,R22
+ 09CC 3197              sbiw R30,1
+ 09CE EE0F              lsl R30
+ 09D0 FF1F              rol R31
+ 09D2 E80F              add R30,R24
+ 09D4 F91F              adc R31,R25
+ 09D6 2790              elpm R2,Z+
+ 09D8 3690              elpm R3,Z
+ 09DA F101              movw R30,R2
+ 09DC 0994               ijmp
+ 09DE           L164:
+ 09DE           ; 	{
+ 09DE           ; 		case STA_CHANGE_POS:
+ 09DE           ; 		case STA_INFO_POS:
+ 09DE           ; 			pos = *(pInfo+1);
+ 09DE FA01              movw R30,R20
+ 09E0 6181              ldd R22,z+1
+ 09E2 7727              clr R23
+ 09E4           ;                       pos = pos << 8;
+ 09E4 762F              mov R23,R22
+ 09E6 6627              clr R22
+ 09E8           ;                       pos += *(pInfo+2);
+ 09E8 2280              ldd R2,z+2
+ 09EA 3324              clr R3
+ 09EC 620D              add R22,R2
+ 09EE 731D              adc R23,R3
+ 09F0           ;                       MotorPosition[curSlave].defPosNum = *(pInfo);
+ 09F0 03E0              ldi R16,3
+ 09F2 1E2D              mov R17,R14
+ 09F4 0103              mulsu R16,R17
+ 09F6 80E0              ldi R24,<_MotorPosition
+ 09F8 90E0              ldi R25,>_MotorPosition
+ 09FA F001              movw R30,R0
+ 09FC E80F              add R30,R24
+ 09FE F91F              adc R31,R25
+ 0A00 DA01              movw R26,R20
+ 0A02 2C90              ld R2,x
+ 0A04 2082              std z+0,R2
+ 0A06           ;                       MotorPosition[curSlave].stepPos = pos;
+ 0A06 0103              mulsu R16,R17
+ 0A08 80E0              ldi R24,<_MotorPosition+1
+ 0A0A 90E0              ldi R25,>_MotorPosition+1
+ 0A0C F001              movw R30,R0
+ 0A0E E80F              add R30,R24
+ 0A10 F91F              adc R31,R25
+ 0A12 7183              std z+1,R23
+ 0A14 6083              std z+0,R22
+ 0A16           ;                       if(EvenPosChangeProcess){
+ 0A16 20908C00          lds R2,_EvenPosChangeProcess
+ 0A1A 30908D00          lds R3,_EvenPosChangeProcess+1
+ 0A1E 2220              tst R2
+ 0A20 19F4              brne X102
+ 0A22 3320              tst R3
+ 0A24 09F4              brne X117
+ 0A26 DEC0              xjmp L162
+ 0A28           X117:
+ 0A28           X102:
+ 0A28           ; 				i = EvenPosChangeProcess(pInfoEvent);
+ 0A28 8501              movw R16,R10
+ 0A2A F101              movw R30,R2
+ 0A2C 0E940000          xcall xicallx
+ 0A30 602F              mov R22,R16
+ 0A32           ;                               if(i)
+ 0A32 0023              tst R16
+ 0A34 09F4              brne X118
+ 0A36 D6C0              xjmp L162
+ 0A38           X118:
+ 0A38           X103:
+ 0A38           ; 					EvenPosChangeProcess = 0;
+ 0A38 2224              clr R2
+ 0A3A 3324              clr R3
+ 0A3C 30928D00          sts _EvenPosChangeProcess+1,R3
+ 0A40 20928C00          sts _EvenPosChangeProcess,R2
+ 0A44           ;                               }
+ 0A44           ;                       break;
+ 0A44 CFC0              xjmp L162
+ 0A46           L170:
+ 0A46           ; 		case STA_MOT_PHO:	// 电机模块光藕状态改变信息
+ 0A46           ; 			MotModulePhoSta[curSlave][*(pInfo)] = *(pInfo+1);
+ 0A46 80E0              ldi R24,<_MotModulePhoSta
+ 0A48 90E0              ldi R25,>_MotModulePhoSta
+ 0A4A 2E2C              mov R2,R14
+ 0A4C 3324              clr R3
+ 0A4E 220C              lsl R2
+ 0A50 331C              rol R3
+ 0A52 280E              add R2,R24
+ 0A54 391E              adc R3,R25
+ 0A56 FA01              movw R30,R20
+ 0A58 E081              ldd R30,z+0
+ 0A5A FF27              clr R31
+ 0A5C E20D              add R30,R2
+ 0A5E F31D              adc R31,R3
+ 0A60 DA01              movw R26,R20
+ 0A62 1196              adiw R26,1
+ 0A64 2C90              ld R2,x
+ 0A66 2082              std z+0,R2
+ 0A68           ;                       break;
+ 0A68 BDC0              xjmp L162
+ 0A6A           L171:
+ 0A6A           ; 
+ 0A6A           ; 		case INFO_LIQ_EMPTY:		// 液路空
+ 0A6A           ; 		case INFO_LIQ_FULL:			// 液路满
+ 0A6A           ; 			i = *pInfo;
+ 0A6A FA01              movw R30,R20
+ 0A6C 6081              ldd R22,z+0
+ 0A6E           ;                       if(i<4){
+ 0A6E 6430              cpi R22,4
+ 0A70 08F0              brlo X119
+ 0A72 B8C0              xjmp L162
+ 0A74           X119:
+ 0A74           X104:
+ 0A74           ; 				LiquidState[i][0] = even;
+ 0A74 80E0              ldi R24,<_LiquidState
+ 0A76 90E0              ldi R25,>_LiquidState
+ 0A78 E62F              mov R30,R22
+ 0A7A FF27              clr R31
+ 0A7C EE0F              lsl R30
+ 0A7E FF1F              rol R31
+ 0A80 E80F              add R30,R24
+ 0A82 F91F              adc R31,R25
+ 0A84 C082              std z+0,R12
+ 0A86           ;                               LiquidState[i][1] = 0;
+ 0A86 80E0              ldi R24,<_LiquidState+1
+ 0A88 90E0              ldi R25,>_LiquidState+1
+ 0A8A E62F              mov R30,R22
+ 0A8C FF27              clr R31
+ 0A8E EE0F              lsl R30
+ 0A90 FF1F              rol R31
+ 0A92 E80F              add R30,R24
+ 0A94 F91F              adc R31,R25
+ 0A96 2224              clr R2
+ 0A98 2082              std z+0,R2
+ 0A9A           ;                               }
+ 0A9A           ;                       break;
+ 0A9A A4C0              xjmp L162
+ 0A9C           L175:
+ 0A9C           ; 		case INFO_LIQ_BUBBLE:		// 有气泡
+ 0A9C           ; 		case INFO_LIQ_FLOW:			// 有液段
+ 0A9C           ; 			i = *pInfo;
+ 0A9C FA01              movw R30,R20
+ 0A9E 6081              ldd R22,z+0
+ 0AA0           ;                       if(i<4){
+ 0AA0 6430              cpi R22,4
+ 0AA2 08F0              brlo X120
+ 0AA4 9FC0              xjmp L162
+ 0AA6           X120:
+ 0AA6           X105:
+ 0AA6           ; 				LiquidState[i][0] = even;
+ 0AA6 80E0              ldi R24,<_LiquidState
+ 0AA8 90E0              ldi R25,>_LiquidState
+ 0AAA E62F              mov R30,R22
+ 0AAC FF27              clr R31
+ 0AAE EE0F              lsl R30
+ 0AB0 FF1F              rol R31
+ 0AB2 E80F              add R30,R24
+ 0AB4 F91F              adc R31,R25
+ 0AB6 C082              std z+0,R12
+ 0AB8           ;                               LiquidState[i][1] = *(pInfo+1);
+ 0AB8 80E0              ldi R24,<_LiquidState+1
+ 0ABA 90E0              ldi R25,>_LiquidState+1
+ 0ABC E62F              mov R30,R22
+ 0ABE FF27              clr R31
+ 0AC0 EE0F              lsl R30
+ 0AC2 FF1F              rol R31
+ 0AC4 E80F              add R30,R24
+ 0AC6 F91F              adc R31,R25
+ 0AC8 DA01              movw R26,R20
+ 0ACA 1196              adiw R26,1
+ 0ACC 2C90              ld R2,x
+ 0ACE 2082              std z+0,R2
+ 0AD0           ;                               }
+ 0AD0           ;                       break;
+ 0AD0 89C0              xjmp L162
+ 0AD2           L179:
+ 0AD2           ; 		case INFO_LIQ_PHO_ON:		// 液路检测光耦检测到液体
+ 0AD2           ; 		case INFO_LIQ_PHO_OFF:		// 液路检测光耦检测到空
+ 0AD2           ; 		case INFO_LIQ_PHO_VAL:		// 液路光耦输出信号值
+ 0AD2           ; 		case INFO_LIQ_PHO_ADJ:		// 液路光耦调整结果
+ 0AD2           ; 			switch(WorkProcessStep){
+ 0AD2 C0900000          lds R12,_WorkProcessStep
+ 0AD6 DD24              clr R13
+ 0AD8 CC20              tst R12
+ 0ADA 11F4              brne X106
+ 0ADC DD20              tst R13
+ 0ADE C9F0              breq L181
+ 0AE0           X106:
+ 0AE0 C601              movw R24,R12
+ 0AE2 8130              cpi R24,1
+ 0AE4 E0E0              ldi R30,0
+ 0AE6 9E07              cpc R25,R30
+ 0AE8 A1F0              breq L181
+ 0AEA           X107:
+ 0AEA 8230              cpi R24,2
+ 0AEC E0E0              ldi R30,0
+ 0AEE 9E07              cpc R25,R30
+ 0AF0 49F0              breq L185
+ 0AF2           X108:
+ 0AF2 8330              cpi R24,3
+ 0AF4 E0E0              ldi R30,0
+ 0AF6 9E07              cpc R25,R30
+ 0AF8 49F0              breq L186
+ 0AFA           X109:
+ 0AFA 8430              cpi R24,4
+ 0AFC E0E0              ldi R30,0
+ 0AFE 9E07              cpc R25,R30
+ 0B00 41F0              breq L181
+ 0B02           X110:
+ 0B02 07C0              xjmp L180
+ 0B04           L185:
+ 0B04           ; 				case 0:		// 空闲
+ 0B04           ; 					break;
+ 0B04           ; 				case 1:		// 机械自检
+ 0B04           ; 					break;
+ 0B04           ; 				case 2:		// 液路自检
+ 0B04           ; 					DiluteStartCheck(pInfoEvent);
+ 0B04 8501              movw R16,R10
+ 0B06 0E940000          xcall _DiluteStartCheck
+ 0B0A           ;                                       break;
+ 0B0A 03C0              xjmp L181
+ 0B0C           L186:
+ 0B0C           ; 				case 3:		// 正常测试
+ 0B0C           ; 					DiluteProcess(pInfoEvent);
+ 0B0C 8501              movw R16,R10
+ 0B0E 0E940000          xcall _DiluteProcess
+ 0B12           ;                                       break;
+ 0B12           ;                               case 4:         // 调试维护
+ 0B12           ;                                       break;
+ 0B12           L180:
+ 0B12           L181:
+ 0B12           ; 				}
+ 0B12           ; 			if(EvenLiquidProcess){
+ 0B12 20908A00          lds R2,_EvenLiquidProcess
+ 0B16 30908B00          lds R3,_EvenLiquidProcess+1
+ 0B1A 2220              tst R2
+ 0B1C 19F4              brne X111
+ 0B1E 3320              tst R3
+ 0B20 09F4              brne X121
+ 0B22 60C0              xjmp L162
+ 0B24           X121:
+ 0B24           X111:
+ 0B24           ; 				i = EvenLiquidProcess(pInfoEvent);
+ 0B24 8501              movw R16,R10
+ 0B26 F101              movw R30,R2
+ 0B28 0E940000          xcall xicallx
+ 0B2C 602F              mov R22,R16
+ 0B2E           ;                               if(i)
+ 0B2E 0023              tst R16
+ 0B30 09F4              brne X122
+ 0B32 58C0              xjmp L162
+ 0B34           X122:
+ 0B34           X112:
+ 0B34           ; 					EvenLiquidProcess = 0;
+ 0B34 2224              clr R2
+ 0B36 3324              clr R3
+ 0B38 30928B00          sts _EvenLiquidProcess+1,R3
+ 0B3C 20928A00          sts _EvenLiquidProcess,R2
+ 0B40           ;                               }
+ 0B40           ;                       break;
+ 0B40 51C0              xjmp L162
+ 0B42           L192:
+ 0B42           ; 		case INFO_STORE_OPEN:		// 片仓打开
+ 0B42           ; 		case INFO_STORE_CLOSE:		// 片仓关闭
+ 0B42           ; 		case INFO_STORE_FULL:		// 片仓满
+ 0B42           ; 		case INFO_STORE_LITTLE:		// 片仓少量
+ 0B42           ; 		case INFO_STORE_EMPTY:		// 片仓空
+ 0B42           ; 		case INFO_STORE_ERROR:		// 片仓状态错误
+ 0B42           ; 		case INFO_STORE_CAL:		// 片仓光路校准信息
+ 0B42           ; 		case INFO_STORE_PHO_VOL:
+ 0B42           ; 		case INFO_STORE_STATE_ALL:	// 全部片仓状态信息
+ 0B42           ; 		case INFO_STORE_STATE_SPC:	// 指定片仓状态信息
+ 0B42           ; 			CardStoreSteteProcess(pInfoEvent);
+ 0B42 8501              movw R16,R10
+ 0B44 0E940000          xcall _CardStoreSteteProcess
+ 0B48           ;                       if(EvenCardStoreProcess)
+ 0B48 20908800          lds R2,_EvenCardStoreProcess
+ 0B4C 30908900          lds R3,_EvenCardStoreProcess+1
+ 0B50 2220              tst R2
+ 0B52 19F4              brne X113
+ 0B54 3320              tst R3
+ 0B56 09F4              brne X123
+ 0B58 45C0              xjmp L162
+ 0B5A           X123:
+ 0B5A           X113:
+ 0B5A           ; 			{
+ 0B5A           ; 				i = EvenCardStoreProcess(pInfoEvent);
+ 0B5A 8501              movw R16,R10
+ 0B5C F101              movw R30,R2
+ 0B5E 0E940000          xcall xicallx
+ 0B62 A02E              mov R10,R16
+ 0B64 6A2D              mov R22,R10
+ 0B66           ;                               if(i)
+ 0B66 0023              tst R16
+ 0B68 09F4              brne X124
+ 0B6A 3CC0              xjmp L162
+ 0B6C           X124:
+ 0B6C           X114:
+ 0B6C           ; 					EvenCardStoreProcess = 0;
+ 0B6C 2224              clr R2
+ 0B6E 3324              clr R3
+ 0B70 30928900          sts _EvenCardStoreProcess+1,R3
+ 0B74 20928800          sts _EvenCardStoreProcess,R2
+ 0B78           ;                       }
+ 0B78           ;                       break;
+ 0B78 35C0              xjmp L162
+ 0B7A           L197:
+ 0B7A           ; 		case INFO_STORE_HUMITURE:	// 片仓温湿度
+ 0B7A           ; 			StoreHumi = *pInfo;
+ 0B7A FA01              movw R30,R20
+ 0B7C 2080              ldd R2,z+0
+ 0B7E 20923400          sts _StoreHumi,R2
+ 0B82           ;                       StoreTemp = *(pInfo+1);
+ 0B82 2180              ldd R2,z+1
+ 0B84 20923300          sts _StoreTemp,R2
+ 0B88           ;                       Uart0ReUnable;
+ 0B88 8091C100          lds R24,193
+ 0B8C 8F7E              andi R24,239
+ 0B8E 8093C100          sts 193,R24
+ 0B92           ;                       uart_Printf("%s $%4d $%4d\r\n",strM0111, StoreHumi, StoreTemp);
+ 0B92 3324              clr R3
+ 0B94 3B82              std y+3,R3
+ 0B96 2A82              std y+2,R2
+ 0B98 20903400          lds R2,_StoreHumi
+ 0B9C 3324              clr R3
+ 0B9E 3982              std y+1,R3
+ 0BA0 2882              std y+0,R2
+ 0BA2 20E0              ldi R18,<_strM0111
+ 0BA4 30E0              ldi R19,>_strM0111
+ 0BA6 00E0              ldi R16,<L198
+ 0BA8 10E0              ldi R17,>L198
+ 0BAA 0E940000          xcall _uart_Printf
+ 0BAE           ;                       Uart0ReEnable;
+ 0BAE 8091C100          lds R24,193
+ 0BB2 8061              ori R24,16
+ 0BB4 8093C100          sts 193,R24
+ 0BB8           ;                       break;
+ 0BB8 15C0              xjmp L162
+ 0BBA           L199:
+ 0BBA           ; 		case INFO_STORE_OPEN_ERR:	// 片仓开启超时错误
+ 0BBA           ; 			Uart0ReUnable;
+ 0BBA 8091C100          lds R24,193
+ 0BBE 8F7E              andi R24,239
+ 0BC0 8093C100          sts 193,R24
+ 0BC4           ;                       uart_Printf("%s $%4d\r\n",strE0910, *pInfo);
+ 0BC4 FA01              movw R30,R20
+ 0BC6 2080              ldd R2,z+0
+ 0BC8 3324              clr R3
+ 0BCA 3982              std y+1,R3
+ 0BCC 2882              std y+0,R2
+ 0BCE 20E0              ldi R18,<_strE0910
+ 0BD0 30E0              ldi R19,>_strE0910
+ 0BD2 00E0              ldi R16,<L200
+ 0BD4 10E0              ldi R17,>L200
+ 0BD6 0E940000          xcall _uart_Printf
+ 0BDA           ;                       Uart0ReEnable;
+ 0BDA 8091C100          lds R24,193
+ 0BDE 8061              ori R24,16
+ 0BE0 8093C100          sts 193,R24
+ 0BE4           ;                       break;
+ 0BE4           ;               default:
+ 0BE4           ;                       break;
+ 0BE4           L162:
+ 0BE4           L159:
+ 0BE4                   .dbline 0 ; func end
+ 0BE4 2496              adiw R28,4
+ 0BE6 0C940000          xjmp pop_xgsetF0FC
+                        .area bss(ram, con, rel)
+ 0001           L203:
+ 0001                   .blkb 1
+ 0002           L204:
+ 0002                   .blkb 1
+ 0003           L205:
+ 0003                   .blkb 1
+ 0004           L206:
+ 0004                   .blkb 1
+ 0005           L207:
+ 0005                   .blkb 1
+ 0006           L208:
+ 0006                   .blkb 1
+ 0007           L209:
+ 0007                   .blkb 1
+ 0008           L210:
+ 0008                   .blkb 1
+ 0009           L211:
+ 0009                   .blkb 1
+ 000A           L212:
+ 000A                   .blkb 1
+ 000B           L213:
+ 000B                   .blkb 1
+ 000C           L214:
+ 000C                   .blkb 1
+ 000D           L215:
+ 000D                   .blkb 1
+                        .area text(rom, con, rel)
+                        .area  func_lit(rom, con, rel)
+ 0040           L315:
+ 0040 9806              .word `L255
+ 0042 DE06              .word `L256
+ 0044 F206              .word `L258
+ 0046 0407              .word `L259
+ 0048 1807              .word `L260
+ 004A 2507              .word `L261
+ 004C 3907              .word `L262
+ 004E 4A07              .word `L263
+ 0050 5E07              .word `L264
+ 0052 6A07              .word `L265
+ 0054 7E07              .word `L266
+ 0056 9F07              .word `L267
+ 0058 B907              .word `L268
+ 005A DA07              .word `L271
+ 005C FF07              .word `L278
+ 005E 0D08              .word `L279
+ 0060 3008              .word `L284
+ 0062 7408              .word `L294
+ 0064 7D08              .word `L295
+ 0066 8908              .word `L296
+ 0068 A808              .word `L299
+ 006A BB08              .word `L300
+ 006C CC08              .word `L301
+ 006E F408              .word `L304
+ 0070 0809              .word `L305
+ 0072 1109              .word `L306
+ 0074 2509              .word `L307
+ 0076 3009              .word `L308
+ 0078 4409              .word `L309
+ 007A 4D09              .word `L310
+ 007C 6109              .word `L311
+ 007E 7509              .word `L312
+ 0080 8809              .word `L313
+ 0082 9C09              .word `L314
+                        .area text(rom, con, rel)
+                        .even
+ 0BEA           _MachinePositionInit::
+ 0BEA 0E940000          xcall push_xgset300C
+ 0BEE 2397              sbiw R28,3
+ 0BF0           ;               }
+ 0BF0           ; 
+ 0BF0           ; }
+ 0BF0           ; 
+ 0BF0           ; /*********************************************************************************************/
+ 0BF0           ; 
+ 0BF0           ; 
+ 0BF0           ; 
+ 0BF0           ; /****************************************************************************************************/
+ 0BF0           ; // 机械运行初始化
+ 0BF0           ; /*
+ 0BF0           ; unsigned char MachinePositionInit(void){
+ 0BF0           ;       // 机械位置初始化
+ 0BF0           ;       static unsigned char mainStep;          
+ 0BF0           ;       static unsigned char waitMotSampTurn,waitMotSampNeedle, waitMotSampPump;
+ 0BF0           ;       static unsigned char waitMotCardTrolley, waitMotCardLoad, waitMotCardUnLoad, waitMotTurnPlate;
+ 0BF0           ;       static unsigned char waitMotLifterA, waitMotLifterB;
+ 0BF0           ;       static unsigned char i, n, m;
+ 0BF0           ; 
+ 0BF0           ; 
+ 0BF0           ;       if(WaitDelayTime(MOT_SAMP_PUMP))                return 0;
+ 0BF0           ;       if(WaitDelayTime(MOT_SAMP_TRUN))                return 0;
+ 0BF0           ;       if(WaitDelayTime(MOT_SAMP_NEEDLE))              return 0;
+ 0BF0           ;       if(WaitDelayTime(MOT_EFFLUENT))                 return 0;
+ 0BF0           ;               
+ 0BF0           ;       if(waitMotSampTurn){    if(GetMotState(MOT_SAMP_TRUN)!=STA_SLAVE_FREE)          return 0;       waitMotSampTurn = 0;    }
+ 0BF0           ;       if(waitMotSampNeedle){  if(GetMotState(MOT_SAMP_NEEDLE)!=STA_SLAVE_FREE)        return 0;       waitMotSampNeedle = 0;  }
+ 0BF0           ;       if(waitMotSampPump){    if(GetMotState(MOT_SAMP_PUMP)!=STA_SLAVE_FREE)          return 0;       waitMotSampPump = 0;    }
+ 0BF0           ;       if(waitMotCardLoad){    if(GetMotState(MOT_CARD_LOAD)!=STA_SLAVE_FREE)          return 0;       waitMotCardLoad = 0;    }
+ 0BF0           ;       if(waitMotCardUnLoad){  if(GetMotState(MOT_CARD_UNLOAD)!=STA_SLAVE_FREE)        return 0;       waitMotCardUnLoad = 0;  }
+ 0BF0           ;       if(waitMotTurnPlate){   if(GetMotState(MOT_TURN_PLATE)!=STA_SLAVE_FREE)         return 0;       waitMotTurnPlate = 0;   }
+ 0BF0           ;       if(waitMotCardTrolley){ if(GetMotState(MOT_STORE_CARD_MOVE)!=STA_SLAVE_FREE)    return 0;       waitMotCardTrolley = 0; }
+ 0BF0           ;       
+ 0BF0           ;       switch(mainStep){
+ 0BF0           ;               case 0:         // 设置运行参数
+ 0BF0           ;                       SetMotRunPam(MOT_SAMP_NEEDLE,240,10,CURRENT_SAMP_NEEDLE);
+ 0BF0           ;                       SetMotRunPam(MOT_CARD_LOAD,160,20,CURRENT_CARD_LOAD);
+ 0BF0           ;                       SetMotRunPam(MOT_CARD_UNLOAD,160,20,CURRENT_CARD_UNLOAD);
+ 0BF0           ;                       SetMotRunPam(MOT_SAMP_PUMP,180,10,CURRENT_SAMP_PUMP);
+ 0BF0           ;                       
+ 0BF0           ;                       MotInitCheck(MOT_SAMP_NEEDLE);
+ 0BF0           ;                       MotInitCheck(MOT_CARD_UNLOAD);
+ 0BF0           ;                       MotInitCheck(MOT_CARD_LOAD);
+ 0BF0           ;                       MotInitCheck(MOT_SAMP_PUMP);
+ 0BF0           ;                       SetCardTrolleyState(0);
+ 0BF0           ;                       SetEValve(EV1, EV_OPEN);
+ 0BF0           ;                       SetMotRunPam(MOT_EFFLUENT, 180, 2, CURRENT_EFFLUENT);
+ 0BF0           ;                       MotRun(MOT_EFFLUENT, 2500);                     // 开启废液泵
+ 0BF0           ;                       waitMotCardUnLoad = 1;
+ 0BF0           ;                       mainStep = 1;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 1:         // 转盘位置初始化
+ 0BF0           ;                       SetMotRunPam(MOT_TURN_PLATE,240,20,CURRENT_TURN_PLATE);
+ 0BF0           ;                       MotInitCheck(MOT_TURN_PLATE);
+ 0BF0           ;                       waitMotTurnPlate = 1;
+ 0BF0           ;                       mainStep = 2;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 2:         // 转盘运行到0位
+ 0BF0           ;                       MotRunToSite(MOT_TURN_PLATE,0);
+ 0BF0           ;                       waitMotTurnPlate = 1;
+ 0BF0           ;                       waitMotSampNeedle = 1;
+ 0BF0           ;                       mainStep = 3;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 3:         // 片仓小车运行到起始位
+ 0BF0           ;                       SetMotRunPam(MOT_STORE_CARD_MOVE,200,10,CURRENT_STORE_MOVE);
+ 0BF0           ;                       MotInitCheck(MOT_STORE_CARD_MOVE);
+ 0BF0           ;                       waitMotSampNeedle = 1;
+ 0BF0           ;                       mainStep = 100;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 100:               // 取样针回零经常出现在运转时给出空闲信号, 此处从新运行以避免错误
+ 0BF0           ;                       MotRunTo(MOT_SAMP_NEEDLE, 0);
+ 0BF0           ;                       waitMotSampNeedle = 1;
+ 0BF0           ;                       mainStep = 4;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 4:         // 取样臂回到起始位
+ 0BF0           ;                       SetEValve(EV_ALL, EV_CLOSE);
+ 0BF0           ;                       SetMotRunPam(MOT_SAMP_TRUN,200,5,CURRENT_SAMP_TRUN);
+ 0BF0           ;                       MotInitCheck(MOT_SAMP_TRUN);
+ 0BF0           ;                       SetEValve(EV1, EV_CLOSE);
+ 0BF0           ;                       waitMotSampTurn = 1;
+ 0BF0           ;                       waitMotSampPump = 1;
+ 0BF0           ;                       waitMotTurnPlate = 1;
+ 0BF0           ;                       //mainStep = 5;
+ 0BF0           ;                       mainStep = 7;
+ 0BF0           ;                       i = 0;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 5: // 取样臂旋转试运行
+ 0BF0           ;                       MotRunTo(MOT_SAMP_TRUN,_POS_SAMPTURN_SAMP+200);
+ 0BF0           ;                       waitMotSampTurn = 1;
+ 0BF0           ;                       mainStep = 6;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 6:
+ 0BF0           ;                       MotRunTo(MOT_SAMP_TRUN,0);
+ 0BF0           ;                       waitMotSampTurn = 1;
+ 0BF0           ;                       i++;
+ 0BF0           ;                       if(i<1){
+ 0BF0           ;                               mainStep = 5;
+ 0BF0           ;                               SetDelayTime(MOT_SAMP_TRUN, 10);
+ 0BF0           ;                               }
+ 0BF0           ;                       else{   
+ 0BF0           ;                               mainStep = 7;   
+ 0BF0           ;                               i = 0;  
+ 0BF0           ;                               }
+ 0BF0           ;                       break;
+ 0BF0           ;               case 7:         // 扫描转盘上遗留干片   _RingPieceState
+ 0BF0           ;                       i++;
+ 0BF0           ;                       if(i>=RING_QUEUE_NUM)
+ 0BF0           ;                               i = 0;
+ 0BF0           ;                       m = PINK & 0x01;
+ 0BF0           ;                       _RingPieceState[i] = 0;
+ 0BF0           ;                       MotRunToSite(MOT_TURN_PLATE,i);
+ 0BF0           ;                       mainStep = 8;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 8:
+ 0BF0           ;                       n = PINK & 0x01;
+ 0BF0           ;                       if(m != n)
+ 0BF0           ;                               _RingPieceState[i] = 1;
+ 0BF0           ;                       if(GetMotState(MOT_TURN_PLATE)!=STA_SLAVE_FREE) 
+ 0BF0           ;                               break;
+ 0BF0           ;                       if(i==0)
+ 0BF0           ;                               mainStep = 9;
+ 0BF0           ;                       else
+ 0BF0           ;                               mainStep = 7;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 9:         // 扫描转盘
+ 0BF0           ;                       MotRunToSite(MOT_TURN_PLATE,10);        // 25 让转盘的0号转到卸片位置
+ 0BF0           ;                       waitMotTurnPlate = 1;
+ 0BF0           ;                       i = 0;
+ 0BF0           ;                       mainStep = 10;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 10:                // 按顺序寻找剩余干片
+ 0BF0           ;                       n = i + 10;
+ 0BF0           ;                       if(n>=RING_QUEUE_NUM)
+ 0BF0           ;                               n -= RING_QUEUE_NUM;
+ 0BF0           ;                       if(GetRingPieceState(i)==1){    // 转盘上有剩余干片
+ 0BF0           ;                               MotRunToSite(MOT_TURN_PLATE,n); // 转盘运行到当前位置
+ 0BF0           ;                               waitMotTurnPlate = 1;
+ 0BF0           ;                               mainStep = 11;
+ 0BF0           ;                               m = 0;          // 废片仓打开计时
+ 0BF0           ;                               }
+ 0BF0           ;                       else
+ 0BF0           ;                               mainStep = 14;          // 继续查找下一个
+ 0BF0           ;                       break;
+ 0BF0           ;               case 11:                // 开始卸载转盘上的干片
+ 0BF0           ;                       if((PINK & 0x02) == 0){
+ 0BF0           ;                               SetDelayTime(MOT_TURN_PLATE, 10);
+ 0BF0           ;                               m ++;
+ 0BF0           ;                               if(m == 2){
+ 0BF0           ;                                       uart_Printf("%s $   1\r\n",strM0200);
+ 0BF0           ;                                       SetBeepWarning();
+ 0BF0           ;                                       }
+ 0BF0           ;                               if(m == 25){
+ 0BF0           ;                                       SetBeepWarning();
+ 0BF0           ;                                       m = 5;
+ 0BF0           ;                                       }
+ 0BF0           ;                               
+ 0BF0           ;                               break;
+ 0BF0           ;                               }
+ 0BF0           ;                       SetMotRunPam(MOT_CARD_UNLOAD,200,20,CURRENT_CARD_UNLOAD);
+ 0BF0           ;                       MotRunTo(MOT_CARD_UNLOAD,_POS_UNLOAD_OUT);
+ 0BF0           ;                       waitMotCardUnLoad = 1;
+ 0BF0           ;                       mainStep = 12;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 12:
+ 0BF0           ;                       SetDelayTime(MOT_SAMP_TRUN, 10);
+ 0BF0           ;                       mainStep = 13;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 13:        // 卸片小车回到起始点
+ 0BF0           ;                       MotRunTo(MOT_CARD_UNLOAD,0);
+ 0BF0           ;                       waitMotCardUnLoad = 1;
+ 0BF0           ;                       mainStep = 14;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 14:
+ 0BF0           ;                       i++;
+ 0BF0           ;                       if(i < RING_QUEUE_NUM)  // 未完继续
+ 0BF0           ;                               mainStep = 10;
+ 0BF0           ;                       else
+ 0BF0           ;                               mainStep = 15;  // 检查结束
+ 0BF0           ;                       break;
+ 0BF0           ;               case 15:        // 检查片仓小车上是否有干片
+ 0BF0           ;                       SetMotRunPam(MOT_STORE_CARD_MOVE,64,10,CURRENT_STORE_MOVE);
+ 0BF0           ;                       MotRunTo(MOT_STORE_CARD_MOVE,100);
+ 0BF0           ;                       waitMotCardTrolley = 1;
+ 0BF0           ;                       mainStep = 16;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 16:
+ 0BF0           ;                       i = PINL & 0x04;                // 读取取片检测传感器空闲状态
+ 0BF0           ;                       MotRunTo(MOT_STORE_CARD_MOVE,0);        // 取片小车运行到零位
+ 0BF0           ;                       waitMotCardTrolley = 1;
+ 0BF0           ;                       mainStep = 17;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 17:
+ 0BF0           ;                       n = PINL & 0x04;                // 读取取片检测传感器状态
+ 0BF0           ;                       if(i != n){             // 取片小车上有剩余干片
+ 0BF0           ;                               MotRunToSite(MOT_TURN_PLATE,0); // 转盘运行到0号位置
+ 0BF0           ;                               waitMotTurnPlate = 1;
+ 0BF0           ;                               mainStep = 18;
+ 0BF0           ;                               }
+ 0BF0           ;                       else
+ 0BF0           ;                               mainStep = 26;          // 取片小车上没有干片, 跳过
+ 0BF0           ;                       break;
+ 0BF0           ;               case 18:                // 干片推入转盘
+ 0BF0           ;                       SetMotRunPam(MOT_CARD_LOAD,160,10,CURRENT_CARD_LOAD);
+ 0BF0           ;                       MotRunTo(MOT_CARD_LOAD,_POS_CARDLOAD_RING);             // 装片行程94mm/0.08128 = 1156
+ 0BF0           ;                       waitMotCardLoad = 1;
+ 0BF0           ;                       mainStep = 20;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 19:                // 干片推入转盘步骤2
+ 0BF0           ;               //      SetMotRunPam(MOT_CARD_LOAD,64,2,2);
+ 0BF0           ;                       MotRunTo(MOT_CARD_LOAD,_POS_CARDLOAD_RING);             // 装片行程94mm/0.08128 = 1156
+ 0BF0           ;                       waitMotCardLoad = 1;
+ 0BF0           ;                       mainStep = 20;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 20:
+ 0BF0           ;                       SetDelayTime(MOT_SAMP_TRUN, 10);
+ 0BF0           ;                       mainStep = 21;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 21:                // 干片推入复位
+ 0BF0           ;                       SetMotRunPam(MOT_CARD_LOAD,200,10,CURRENT_CARD_LOAD);
+ 0BF0           ;                       MotRunTo(MOT_CARD_LOAD,0);
+ 0BF0           ;                       waitMotCardLoad = 1;
+ 0BF0           ;                       mainStep = 22;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 22:                // 转盘0号转到卸片位置
+ 0BF0           ;               //      SetMotRunPam(MOT_TURN_PLATE,240,10,2);
+ 0BF0           ;                       MotRunToSite(MOT_TURN_PLATE,25);
+ 0BF0           ;                       waitMotTurnPlate = 1;
+ 0BF0           ;                       mainStep = 23;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 23:                // 开始卸片
+ 0BF0           ;                       SetMotRunPam(MOT_CARD_UNLOAD,200,20,CURRENT_CARD_UNLOAD);
+ 0BF0           ;                       MotRunTo(MOT_CARD_UNLOAD,_POS_UNLOAD_OUT);
+ 0BF0           ;                       waitMotCardUnLoad = 1;
+ 0BF0           ;                       mainStep = 24;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 24:
+ 0BF0           ;                       SetDelayTime(MOT_SAMP_TRUN,10);
+ 0BF0           ;                       mainStep = 25;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 25:                // 卸片小车回到起始位
+ 0BF0           ;                       SetMotRunPam(MOT_CARD_UNLOAD,200,20,2);
+ 0BF0           ;                       MotRunTo(MOT_CARD_UNLOAD,_POS_UNLOAD_HOME);
+ 0BF0           ;                       waitMotCardUnLoad = 1;
+ 0BF0           ;                       mainStep = 26;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 26:                // 转盘运转到初始状态
+ 0BF0           ;                       MotRunToSite(MOT_TURN_PLATE,29);
+ 0BF0           ;                       waitMotTurnPlate = 1;
+ 0BF0           ;                       MotRunTo(MOT_STORE_CARD_MOVE,432);
+ 0BF0           ;                       waitMotCardTrolley = 1;
+ 0BF0           ;                       mainStep = 27;
+ 0BF0           ;                       break;
+ 0BF0           ;               case 27:
+ 0BF0           ;                       uart_Printf("%s\r\n", strM1101);
+ 0BF0           ;                       mainStep = 0;
+ 0BF0           ;                       return 1;
+ 0BF0           ;                       break;
+ 0BF0           ;               }
+ 0BF0           ;       return 0;
+ 0BF0           ; }
+ 0BF0           ; */
+ 0BF0           ; 
+ 0BF0           ; unsigned char MachinePositionInit(void){
+ 0BF0           ;       // 机械位置初始化
+ 0BF0           ;       static unsigned char mainStep;          
+ 0BF0           ;       static unsigned char waitMotSampTurn,waitMotSampNeedle, waitMotSampPump;
+ 0BF0           ;       static unsigned char waitMotCardTrolley, waitMotCardLoad, waitMotCardUnLoad, waitMotTurnPlate;
+ 0BF0           ;       static unsigned char waitMotLifterA, waitMotLifterB;
+ 0BF0           ;       static unsigned char i, n, m;
+ 0BF0           ; 
+ 0BF0           ; 
+ 0BF0           ;       if(WaitDelayTime(MOT_SAMP_PUMP))                return 0;
+ 0BF0 0CE0              ldi R16,12
+ 0BF2 0E940000          xcall _WaitDelayTime
+ 0BF6 0023              tst R16
+ 0BF8 11F0              breq L216
+ 0BFA           X125:
+ 0BFA 0027              clr R16
+ 0BFC B3C3              xjmp L202
+ 0BFE           L216:
+ 0BFE           ; 	if(WaitDelayTime(MOT_SAMP_TRUN))		return 0;
+ 0BFE 02E0              ldi R16,2
+ 0C00 0E940000          xcall _WaitDelayTime
+ 0C04 0023              tst R16
+ 0C06 11F0              breq L218
+ 0C08           X126:
+ 0C08 0027              clr R16
+ 0C0A ACC3              xjmp L202
+ 0C0C           L218:
+ 0C0C           ; 	if(WaitDelayTime(MOT_SAMP_NEEDLE))		return 0;
+ 0C0C 03E0              ldi R16,3
+ 0C0E 0E940000          xcall _WaitDelayTime
+ 0C12 A02E              mov R10,R16
+ 0C14 0023              tst R16
+ 0C16 11F0              breq L220
+ 0C18           X127:
+ 0C18 0027              clr R16
+ 0C1A A4C3              xjmp L202
+ 0C1C           L220:
+ 0C1C           ; 	if(WaitDelayTime(MOT_EFFLUENT))			return 0;
+ 0C1C 0BE0              ldi R16,11
+ 0C1E 0E940000          xcall _WaitDelayTime
+ 0C22 A02E              mov R10,R16
+ 0C24 0023              tst R16
+ 0C26 11F0              breq L222
+ 0C28           X128:
+ 0C28 0027              clr R16
+ 0C2A 9CC3              xjmp L202
+ 0C2C           L222:
+ 0C2C           ; 		
+ 0C2C           ; 	if(waitMotSampTurn){	if(GetMotState(MOT_SAMP_TRUN)!=STA_SLAVE_FREE)		return 0;	waitMotSampTurn = 0;	}
+ 0C2C 20900200          lds R2,L204
+ 0C30 2220              tst R2
+ 0C32 59F0              breq L224
+ 0C34           X129:
+ 0C34 02E0              ldi R16,2
+ 0C36 0E940000          xcall _GetMotState
+ 0C3A 402F              mov R20,R16
+ 0C3C 0130              cpi R16,1
+ 0C3E 11F0              breq L226
+ 0C40           X130:
+ 0C40 0027              clr R16
+ 0C42 90C3              xjmp L202
+ 0C44           L226:
+ 0C44 2224              clr R2
+ 0C46 20920200          sts L204,R2
+ 0C4A           L224:
+ 0C4A           ; 	if(waitMotSampNeedle){	if(GetMotState(MOT_SAMP_NEEDLE)!=STA_SLAVE_FREE)	return 0;	waitMotSampNeedle = 0;	}
+ 0C4A 20900300          lds R2,L205
+ 0C4E 2220              tst R2
+ 0C50 59F0              breq L228
+ 0C52           X131:
+ 0C52 03E0              ldi R16,3
+ 0C54 0E940000          xcall _GetMotState
+ 0C58 402F              mov R20,R16
+ 0C5A 0130              cpi R16,1
+ 0C5C 11F0              breq L230
+ 0C5E           X132:
+ 0C5E 0027              clr R16
+ 0C60 81C3              xjmp L202
+ 0C62           L230:
+ 0C62 2224              clr R2
+ 0C64 20920300          sts L205,R2
+ 0C68           L228:
+ 0C68           ; 	if(waitMotSampPump){	if(GetMotState(MOT_SAMP_PUMP)!=STA_SLAVE_FREE)		return 0;	waitMotSampPump = 0;	}
+ 0C68 20900400          lds R2,L206
+ 0C6C 2220              tst R2
+ 0C6E 59F0              breq L232
+ 0C70           X133:
+ 0C70 0CE0              ldi R16,12
+ 0C72 0E940000          xcall _GetMotState
+ 0C76 402F              mov R20,R16
+ 0C78 0130              cpi R16,1
+ 0C7A 11F0              breq L234
+ 0C7C           X134:
+ 0C7C 0027              clr R16
+ 0C7E 72C3              xjmp L202
+ 0C80           L234:
+ 0C80 2224              clr R2
+ 0C82 20920400          sts L206,R2
+ 0C86           L232:
+ 0C86           ; 	if(waitMotCardLoad){	if(GetMotState(MOT_CARD_LOAD)!=STA_SLAVE_FREE)		return 0;	waitMotCardLoad = 0;	}
+ 0C86 20900600          lds R2,L208
+ 0C8A 2220              tst R2
+ 0C8C 59F0              breq L236
+ 0C8E           X135:
+ 0C8E 04E0              ldi R16,4
+ 0C90 0E940000          xcall _GetMotState
+ 0C94 402F              mov R20,R16
+ 0C96 0130              cpi R16,1
+ 0C98 11F0              breq L238
+ 0C9A           X136:
+ 0C9A 0027              clr R16
+ 0C9C 63C3              xjmp L202
+ 0C9E           L238:
+ 0C9E 2224              clr R2
+ 0CA0 20920600          sts L208,R2
+ 0CA4           L236:
+ 0CA4           ; 	if(waitMotCardUnLoad){	if(GetMotState(MOT_CARD_UNLOAD)!=STA_SLAVE_FREE)	return 0;	waitMotCardUnLoad = 0;	}
+ 0CA4 20900700          lds R2,L209
+ 0CA8 2220              tst R2
+ 0CAA 59F0              breq L240
+ 0CAC           X137:
+ 0CAC 05E0              ldi R16,5
+ 0CAE 0E940000          xcall _GetMotState
+ 0CB2 402F              mov R20,R16
+ 0CB4 0130              cpi R16,1
+ 0CB6 11F0              breq L242
+ 0CB8           X138:
+ 0CB8 0027              clr R16
+ 0CBA 54C3              xjmp L202
+ 0CBC           L242:
+ 0CBC 2224              clr R2
+ 0CBE 20920700          sts L209,R2
+ 0CC2           L240:
+ 0CC2           ; 	if(waitMotTurnPlate){	if(GetMotState(MOT_TURN_PLATE)!=STA_SLAVE_FREE)		return 0;	waitMotTurnPlate = 0;	}
+ 0CC2 20900800          lds R2,L210
+ 0CC6 2220              tst R2
+ 0CC8 59F0              breq L244
+ 0CCA           X139:
+ 0CCA 01E0              ldi R16,1
+ 0CCC 0E940000          xcall _GetMotState
+ 0CD0 402F              mov R20,R16
+ 0CD2 0130              cpi R16,1
+ 0CD4 11F0              breq L246
+ 0CD6           X140:
+ 0CD6 0027              clr R16
+ 0CD8 45C3              xjmp L202
+ 0CDA           L246:
+ 0CDA 2224              clr R2
+ 0CDC 20920800          sts L210,R2
+ 0CE0           L244:
+ 0CE0           ; 	if(waitMotCardTrolley){	if(GetMotState(MOT_STORE_CARD_MOVE)!=STA_SLAVE_FREE)	return 0;	waitMotCardTrolley = 0;	}
+ 0CE0 20900500          lds R2,L207
+ 0CE4 2220              tst R2
+ 0CE6 59F0              breq L248
+ 0CE8           X141:
+ 0CE8 08E0              ldi R16,8
+ 0CEA 0E940000          xcall _GetMotState
+ 0CEE 402F              mov R20,R16
+ 0CF0 0130              cpi R16,1
+ 0CF2 11F0              breq L250
+ 0CF4           X142:
+ 0CF4 0027              clr R16
+ 0CF6 36C3              xjmp L202
+ 0CF8           L250:
+ 0CF8 2224              clr R2
+ 0CFA 20920500          sts L207,R2
+ 0CFE           L248:
+ 0CFE           ; 	
+ 0CFE           ; 	switch(mainStep)
+ 0CFE 40910100          lds R20,L203
+ 0D02 5527              clr R21
+ 0D04 4030              cpi R20,0
+ 0D06 E0E0              ldi R30,0
+ 0D08 5E07              cpc R21,R30
+ 0D0A 0CF4              brge X157
+ 0D0C 2AC3              xjmp L252
+ 0D0E           X157:
+ 0D0E           X143:
+ 0D0E 81E2              ldi R24,33
+ 0D10 90E0              ldi R25,0
+ 0D12 8417              cp R24,R20
+ 0D14 9507              cpc R25,R21
+ 0D16 0CF4              brge X158
+ 0D18 24C3              xjmp L252
+ 0D1A           X158:
+ 0D1A           X144:
+ 0D1A 80E0              ldi R24,<L315
+ 0D1C 90E0              ldi R25,>L315
+ 0D1E FA01              movw R30,R20
+ 0D20 EE0F              lsl R30
+ 0D22 FF1F              rol R31
+ 0D24 E80F              add R30,R24
+ 0D26 F91F              adc R31,R25
+ 0D28 2790              elpm R2,Z+
+ 0D2A 3690              elpm R3,Z
+ 0D2C F101              movw R30,R2
+ 0D2E 0994               ijmp
+ 0D30           L255:
+ 0D30           ; 	{
+ 0D30           ; 		case 0:		// 设置运行参数
+ 0D30           ; 			SetMotRunPam(MOT_SAMP_NEEDLE,240,10,CURRENT_SAMP_NEEDLE);
+ 0D30 83E0              ldi R24,3
+ 0D32 8A83              std y+2,R24
+ 0D34 8AE0              ldi R24,10
+ 0D36 8883              std y+0,R24
+ 0D38 20EF              ldi R18,240
+ 0D3A 03E0              ldi R16,3
+ 0D3C 0E940000          xcall _SetMotRunPam
+ 0D40           ;                       SetMotRunPam(MOT_CARD_LOAD,160,20,CURRENT_CARD_LOAD);
+ 0D40 84E0              ldi R24,4
+ 0D42 8A83              std y+2,R24
+ 0D44 84E1              ldi R24,20
+ 0D46 8883              std y+0,R24
+ 0D48 20EA              ldi R18,160
+ 0D4A 04E0              ldi R16,4
+ 0D4C 0E940000          xcall _SetMotRunPam
+ 0D50           ;                       SetMotRunPam(MOT_CARD_UNLOAD,160,20,CURRENT_CARD_UNLOAD);
+ 0D50 84E0              ldi R24,4
+ 0D52 8A83              std y+2,R24
+ 0D54 84E1              ldi R24,20
+ 0D56 8883              std y+0,R24
+ 0D58 20EA              ldi R18,160
+ 0D5A 05E0              ldi R16,5
+ 0D5C 0E940000          xcall _SetMotRunPam
+ 0D60           ;                       SetMotRunPam(MOT_SAMP_PUMP,180,10,CURRENT_SAMP_PUMP);
+ 0D60 86E0              ldi R24,6
+ 0D62 8A83              std y+2,R24
+ 0D64 8AE0              ldi R24,10
+ 0D66 8883              std y+0,R24
+ 0D68 24EB              ldi R18,180
+ 0D6A 0CE0              ldi R16,12
+ 0D6C 0E940000          xcall _SetMotRunPam
+ 0D70           ;                       
+ 0D70           ;                       MotInitCheck(MOT_SAMP_NEEDLE);
+ 0D70 03E0              ldi R16,3
+ 0D72 0E940000          xcall _MotInitCheck
+ 0D76           ;                       MotInitCheck(MOT_CARD_UNLOAD);
+ 0D76 05E0              ldi R16,5
+ 0D78 0E940000          xcall _MotInitCheck
+ 0D7C           ;                       MotInitCheck(MOT_CARD_LOAD);
+ 0D7C 04E0              ldi R16,4
+ 0D7E 0E940000          xcall _MotInitCheck
+ 0D82           ;                       MotInitCheck(MOT_SAMP_PUMP);
+ 0D82 0CE0              ldi R16,12
+ 0D84 0E940000          xcall _MotInitCheck
+ 0D88           ;                       SetCardTrolleyState(0);
+ 0D88 0027              clr R16
+ 0D8A 0E940000          xcall _SetCardTrolleyState
+ 0D8E           ;                       SetEValve(EV1, EV_OPEN);
+ 0D8E 21E0              ldi R18,1
+ 0D90 01E0              ldi R16,1
+ 0D92 0E940000          xcall _SetEValve
+ 0D96           ;                       SetMotRunPam(MOT_EFFLUENT, 180, 2, CURRENT_EFFLUENT);
+ 0D96 84E0              ldi R24,4
+ 0D98 8A83              std y+2,R24
+ 0D9A 82E0              ldi R24,2
+ 0D9C 8883              std y+0,R24
+ 0D9E 24EB              ldi R18,180
+ 0DA0 0BE0              ldi R16,11
+ 0DA2 0E940000          xcall _SetMotRunPam
+ 0DA6           ;                       MotRun(MOT_EFFLUENT, 2500);                     // 开启废液泵
+ 0DA6 24EC              ldi R18,2500
+ 0DA8 39E0              ldi R19,9
+ 0DAA 0BE0              ldi R16,11
+ 0DAC 0E940000          xcall _MotRun
+ 0DB0           ;                       waitMotCardUnLoad = 1;
+ 0DB0 81E0              ldi R24,1
+ 0DB2 80930700          sts L209,R24
+ 0DB6           ;                       mainStep = 1;
+ 0DB6 80930100          sts L203,R24
+ 0DBA           ;                       break;
+ 0DBA D3C2              xjmp L253
+ 0DBC           L256:
+ 0DBC           ; 		case 1:
+ 0DBC           ; 			Uart0ReUnable;
+ 0DBC 8091C100          lds R24,193
+ 0DC0 8F7E              andi R24,239
+ 0DC2 8093C100          sts 193,R24
+ 0DC6           ;                       uart_Printf("%s\r\n",strM2103);
+ 0DC6 20E0              ldi R18,<_strM2103
+ 0DC8 30E0              ldi R19,>_strM2103
+ 0DCA 00E0              ldi R16,<L257
+ 0DCC 10E0              ldi R17,>L257
+ 0DCE 0E940000          xcall _uart_Printf
+ 0DD2           ;                       Uart0ReEnable;
+ 0DD2 8091C100          lds R24,193
+ 0DD6 8061              ori R24,16
+ 0DD8 8093C100          sts 193,R24
+ 0DDC           ;                       mainStep = 2;
+ 0DDC 82E0              ldi R24,2
+ 0DDE 80930100          sts L203,R24
+ 0DE2           ;                       break;
+ 0DE2 BFC2              xjmp L253
+ 0DE4           L258:
+ 0DE4           ; 		case 2:		// 转盘位置初始化
+ 0DE4           ; 			SetMotRunPam(MOT_TURN_PLATE,240,20,CURRENT_TURN_PLATE);
+ 0DE4 81E0              ldi R24,1
+ 0DE6 8A83              std y+2,R24
+ 0DE8 84E1              ldi R24,20
+ 0DEA 8883              std y+0,R24
+ 0DEC 20EF              ldi R18,240
+ 0DEE 01E0              ldi R16,1
+ 0DF0 0E940000          xcall _SetMotRunPam
+ 0DF4           ;                       MotInitCheck(MOT_TURN_PLATE);
+ 0DF4 01E0              ldi R16,1
+ 0DF6 0E940000          xcall _MotInitCheck
+ 0DFA           ;                       waitMotTurnPlate = 1;
+ 0DFA 81E0              ldi R24,1
+ 0DFC 80930800          sts L210,R24
+ 0E00           ;                       mainStep = 3;
+ 0E00 83E0              ldi R24,3
+ 0E02 80930100          sts L203,R24
+ 0E06           ;                       break;
+ 0E06 ADC2              xjmp L253
+ 0E08           L259:
+ 0E08           ; 		case 3:
+ 0E08           ; 			Uart0ReUnable;
+ 0E08 8091C100          lds R24,193
+ 0E0C 8F7E              andi R24,239
+ 0E0E 8093C100          sts 193,R24
+ 0E12           ;                       uart_Printf("%s\r\n",strM2104);
+ 0E12 20E0              ldi R18,<_strM2104
+ 0E14 30E0              ldi R19,>_strM2104
+ 0E16 00E0              ldi R16,<L257
+ 0E18 10E0              ldi R17,>L257
+ 0E1A 0E940000          xcall _uart_Printf
+ 0E1E           ;                       Uart0ReEnable;
+ 0E1E 8091C100          lds R24,193
+ 0E22 8061              ori R24,16
+ 0E24 8093C100          sts 193,R24
+ 0E28           ;                       mainStep = 4;
+ 0E28 84E0              ldi R24,4
+ 0E2A 80930100          sts L203,R24
+ 0E2E           ;                       break;
+ 0E2E 99C2              xjmp L253
+ 0E30           L260:
+ 0E30           ; 		case 4:		// 转盘运行到0位
+ 0E30           ; 			MotRunToSite(MOT_TURN_PLATE,0);
+ 0E30 2227              clr R18
+ 0E32 01E0              ldi R16,1
+ 0E34 0E940000          xcall _MotRunToSite
+ 0E38           ;                       waitMotTurnPlate = 1;
+ 0E38 81E0              ldi R24,1
+ 0E3A 80930800          sts L210,R24
+ 0E3E           ;                       waitMotSampNeedle = 1;
+ 0E3E 80930300          sts L205,R24
+ 0E42           ;                       mainStep = 5;
+ 0E42 85E0              ldi R24,5
+ 0E44 80930100          sts L203,R24
+ 0E48           ;                       break;
+ 0E48 8CC2              xjmp L253
+ 0E4A           L261:
+ 0E4A           ; 		case 5:
+ 0E4A           ; 			Uart0ReUnable;
+ 0E4A 8091C100          lds R24,193
+ 0E4E 8F7E              andi R24,239
+ 0E50 8093C100          sts 193,R24
+ 0E54           ;                       uart_Printf("%s\r\n",strM2107);
+ 0E54 20E0              ldi R18,<_strM2107
+ 0E56 30E0              ldi R19,>_strM2107
+ 0E58 00E0              ldi R16,<L257
+ 0E5A 10E0              ldi R17,>L257
+ 0E5C 0E940000          xcall _uart_Printf
+ 0E60           ;                       Uart0ReEnable;
+ 0E60 8091C100          lds R24,193
+ 0E64 8061              ori R24,16
+ 0E66 8093C100          sts 193,R24
+ 0E6A           ;                       mainStep = 6;
+ 0E6A 86E0              ldi R24,6
+ 0E6C 80930100          sts L203,R24
+ 0E70           ;                       break;
+ 0E70 78C2              xjmp L253
+ 0E72           L262:
+ 0E72           ; 		case 6:		// 片仓小车运行到起始位
+ 0E72           ; 			SetMotRunPam(MOT_STORE_CARD_MOVE,200,10,CURRENT_STORE_MOVE);
+ 0E72 8AE0              ldi R24,10
+ 0E74 8A83              std y+2,R24
+ 0E76 8883              std y+0,R24
+ 0E78 28EC              ldi R18,200
+ 0E7A 08E0              ldi R16,8
+ 0E7C 0E940000          xcall _SetMotRunPam
+ 0E80           ;                       MotInitCheck(MOT_STORE_CARD_MOVE);
+ 0E80 08E0              ldi R16,8
+ 0E82 0E940000          xcall _MotInitCheck
+ 0E86           ;                       waitMotSampNeedle = 1;
+ 0E86 81E0              ldi R24,1
+ 0E88 80930300          sts L205,R24
+ 0E8C           ;                       mainStep = 7;
+ 0E8C 87E0              ldi R24,7
+ 0E8E 80930100          sts L203,R24
+ 0E92           ;                       break;
+ 0E92 67C2              xjmp L253
+ 0E94           L263:
+ 0E94           ; 		case 7:
+ 0E94           ; 			Uart0ReUnable;
+ 0E94 8091C100          lds R24,193
+ 0E98 8F7E              andi R24,239
+ 0E9A 8093C100          sts 193,R24
+ 0E9E           ;                       uart_Printf("%s\r\n",strM2108);
+ 0E9E 20E0              ldi R18,<_strM2108
+ 0EA0 30E0              ldi R19,>_strM2108
+ 0EA2 00E0              ldi R16,<L257
+ 0EA4 10E0              ldi R17,>L257
+ 0EA6 0E940000          xcall _uart_Printf
+ 0EAA           ;                       Uart0ReEnable;
+ 0EAA 8091C100          lds R24,193
+ 0EAE 8061              ori R24,16
+ 0EB0 8093C100          sts 193,R24
+ 0EB4           ;                       mainStep = 8;
+ 0EB4 88E0              ldi R24,8
+ 0EB6 80930100          sts L203,R24
+ 0EBA           ;                       break;
+ 0EBA 53C2              xjmp L253
+ 0EBC           L264:
+ 0EBC           ; 		case 8:		// 取样针回零经常出现在运转时给出空闲信号, 此处从新运行以避免错误
+ 0EBC           ; 			MotRunTo(MOT_SAMP_NEEDLE, 0);
+ 0EBC 2227              clr R18
+ 0EBE 3327              clr R19
+ 0EC0 03E0              ldi R16,3
+ 0EC2 0E940000          xcall _MotRunTo
+ 0EC6           ;                       waitMotSampNeedle = 1;
+ 0EC6 81E0              ldi R24,1
+ 0EC8 80930300          sts L205,R24
+ 0ECC           ;                       mainStep = 9;
+ 0ECC 89E0              ldi R24,9
+ 0ECE 80930100          sts L203,R24
+ 0ED2           ;                       break;
+ 0ED2 47C2              xjmp L253
+ 0ED4           L265:
+ 0ED4           ; 		case 9:
+ 0ED4           ; 			Uart0ReUnable;
+ 0ED4 8091C100          lds R24,193
+ 0ED8 8F7E              andi R24,239
+ 0EDA 8093C100          sts 193,R24
+ 0EDE           ;                       uart_Printf("%s\r\n",strM2109);
+ 0EDE 20E0              ldi R18,<_strM2109
+ 0EE0 30E0              ldi R19,>_strM2109
+ 0EE2 00E0              ldi R16,<L257
+ 0EE4 10E0              ldi R17,>L257
+ 0EE6 0E940000          xcall _uart_Printf
+ 0EEA           ;                       Uart0ReEnable;
+ 0EEA 8091C100          lds R24,193
+ 0EEE 8061              ori R24,16
+ 0EF0 8093C100          sts 193,R24
+ 0EF4           ;                       mainStep = 10;
+ 0EF4 8AE0              ldi R24,10
+ 0EF6 80930100          sts L203,R24
+ 0EFA           ;                       break;
+ 0EFA 33C2              xjmp L253
+ 0EFC           L266:
+ 0EFC           ; 		case 10:		// 取样臂回到起始位
+ 0EFC           ; 			SetEValve(EV_ALL, EV_CLOSE);
+ 0EFC 2227              clr R18
+ 0EFE 0027              clr R16
+ 0F00 0E940000          xcall _SetEValve
+ 0F04           ;                       SetMotRunPam(MOT_SAMP_TRUN,200,5,CURRENT_SAMP_TRUN);
+ 0F04 84E0              ldi R24,4
+ 0F06 8A83              std y+2,R24
+ 0F08 85E0              ldi R24,5
+ 0F0A 8883              std y+0,R24
+ 0F0C 28EC              ldi R18,200
+ 0F0E 02E0              ldi R16,2
+ 0F10 0E940000          xcall _SetMotRunPam
+ 0F14           ;                       MotInitCheck(MOT_SAMP_TRUN);
+ 0F14 02E0              ldi R16,2
+ 0F16 0E940000          xcall _MotInitCheck
+ 0F1A           ;                       SetEValve(EV1, EV_CLOSE);
+ 0F1A 2227              clr R18
+ 0F1C 01E0              ldi R16,1
+ 0F1E 0E940000          xcall _SetEValve
+ 0F22           ;                       waitMotSampTurn = 1;
+ 0F22 81E0              ldi R24,1
+ 0F24 80930200          sts L204,R24
+ 0F28           ;                       waitMotSampPump = 1;
+ 0F28 80930400          sts L206,R24
+ 0F2C           ;                       waitMotTurnPlate = 1;
+ 0F2C 80930800          sts L210,R24
+ 0F30           ;                       mainStep = 11;
+ 0F30 8BE0              ldi R24,11
+ 0F32 80930100          sts L203,R24
+ 0F36           ;                       i = 0;
+ 0F36 2224              clr R2
+ 0F38 20920B00          sts L213,R2
+ 0F3C           ;                       break;
+ 0F3C 12C2              xjmp L253
+ 0F3E           L267:
+ 0F3E           ; 		case 11:
+ 0F3E           ; 			Uart0ReUnable;
+ 0F3E 8091C100          lds R24,193
+ 0F42 8F7E              andi R24,239
+ 0F44 8093C100          sts 193,R24
+ 0F48           ;                       uart_Printf("%s\r\n",strM2113);
+ 0F48 20E0              ldi R18,<_strM2113
+ 0F4A 30E0              ldi R19,>_strM2113
+ 0F4C 00E0              ldi R16,<L257
+ 0F4E 10E0              ldi R17,>L257
+ 0F50 0E940000          xcall _uart_Printf
+ 0F54           ;                       uart_Printf("%s\r\n",strM2118);
+ 0F54 20E0              ldi R18,<_strM2118
+ 0F56 30E0              ldi R19,>_strM2118
+ 0F58 00E0              ldi R16,<L257
+ 0F5A 10E0              ldi R17,>L257
+ 0F5C 0E940000          xcall _uart_Printf
+ 0F60           ;                       Uart0ReEnable;
+ 0F60 8091C100          lds R24,193
+ 0F64 8061              ori R24,16
+ 0F66 8093C100          sts 193,R24
+ 0F6A           ;                       mainStep = 12;
+ 0F6A 8CE0              ldi R24,12
+ 0F6C 80930100          sts L203,R24
+ 0F70           ;                       break;
+ 0F70 F8C1              xjmp L253
+ 0F72           L268:
+ 0F72           ; 		case 12:		// 扫描转盘上遗留干片	_RingPieceState
+ 0F72           ; 			i++;
+ 0F72 80910B00          lds R24,L213
+ 0F76 8F5F              subi R24,255    ; addi 1
+ 0F78 80930B00          sts L213,R24
+ 0F7C           ;                       if(i >= RING_QUEUE_NUM)
+ 0F7C 8E31              cpi R24,30
+ 0F7E 18F0              brlo L269
+ 0F80           X145:
+ 0F80           ; 				i = 0;
+ 0F80 2224              clr R2
+ 0F82 20920B00          sts L213,R2
+ 0F86           L269:
+ 0F86           ; 			m = PINK & 0x01;
+ 0F86 80910601          lds R24,262
+ 0F8A 8170              andi R24,1
+ 0F8C 80930D00          sts L215,R24
+ 0F90           ;                       _RingPieceState[i] = 0;
+ 0F90 80E0              ldi R24,<__RingPieceState
+ 0F92 90E0              ldi R25,>__RingPieceState
+ 0F94 E0910B00          lds R30,L213
+ 0F98 FF27              clr R31
+ 0F9A E80F              add R30,R24
+ 0F9C F91F              adc R31,R25
+ 0F9E 2224              clr R2
+ 0FA0 2082              std z+0,R2
+ 0FA2           ;                       MotRunToSite(MOT_TURN_PLATE,i);
+ 0FA2 20910B00          lds R18,L213
+ 0FA6 01E0              ldi R16,1
+ 0FA8 0E940000          xcall _MotRunToSite
+ 0FAC           ;                       mainStep = 13;
+ 0FAC 8DE0              ldi R24,13
+ 0FAE 80930100          sts L203,R24
+ 0FB2           ;                       break;
+ 0FB2 D7C1              xjmp L253
+ 0FB4           L271:
+ 0FB4           ; 		case 13:
+ 0FB4           ; 			n = PINK & 0x01;
+ 0FB4 80910601          lds R24,262
+ 0FB8 8170              andi R24,1
+ 0FBA 80930C00          sts L214,R24
+ 0FBE           ;                       if(m != n)
+ 0FBE 30900D00          lds R3,L215
+ 0FC2 3816              cp R3,R24
+ 0FC4 49F0              breq L272
+ 0FC6           X146:
+ 0FC6           ; 				_RingPieceState[i] = 1;
+ 0FC6 80E0              ldi R24,<__RingPieceState
+ 0FC8 90E0              ldi R25,>__RingPieceState
+ 0FCA E0910B00          lds R30,L213
+ 0FCE FF27              clr R31
+ 0FD0 E80F              add R30,R24
+ 0FD2 F91F              adc R31,R25
+ 0FD4 81E0              ldi R24,1
+ 0FD6 8083              std z+0,R24
+ 0FD8           L272:
+ 0FD8           ; 			if(GetMotState(MOT_TURN_PLATE)!=STA_SLAVE_FREE)	
+ 0FD8 01E0              ldi R16,1
+ 0FDA 0E940000          xcall _GetMotState
+ 0FDE 402F              mov R20,R16
+ 0FE0 0130              cpi R16,1
+ 0FE2 09F0              breq L274
+ 0FE4           X147:
+ 0FE4           ; 				break;
+ 0FE4 BEC1              xjmp L253
+ 0FE6           L274:
+ 0FE6           ; 			if(i == 0)
+ 0FE6 20900B00          lds R2,L213
+ 0FEA 2220              tst R2
+ 0FEC 21F4              brne L276
+ 0FEE           X148:
+ 0FEE           ; 				mainStep = 14;
+ 0FEE 8EE0              ldi R24,14
+ 0FF0 80930100          sts L203,R24
+ 0FF4 B6C1              xjmp L253
+ 0FF6           L276:
+ 0FF6           ; 			else
+ 0FF6           ; 				mainStep = 12;
+ 0FF6 8CE0              ldi R24,12
+ 0FF8 80930100          sts L203,R24
+ 0FFC           ;                       break;
+ 0FFC B2C1              xjmp L253
+ 0FFE           L278:
+ 0FFE           ; 		case 14:		// 扫描转盘
+ 0FFE           ; 			MotRunToSite(MOT_TURN_PLATE,10);	// 25 让转盘的0号转到卸片位置
+ 0FFE 2AE0              ldi R18,10
+ 1000 01E0              ldi R16,1
+ 1002 0E940000          xcall _MotRunToSite
+ 1006           ;                       waitMotTurnPlate = 1;
+ 1006 81E0              ldi R24,1
+ 1008 80930800          sts L210,R24
+ 100C           ;                       i = 0;
+ 100C 2224              clr R2
+ 100E 20920B00          sts L213,R2
+ 1012           ;                       mainStep = 15;
+ 1012 8FE0              ldi R24,15
+ 1014 80930100          sts L203,R24
+ 1018           ;                       break;
+ 1018 A4C1              xjmp L253
+ 101A           L279:
+ 101A           ; 		case 15:		// 按顺序寻找剩余干片
+ 101A           ; 			n = i + 10;
+ 101A 80910B00          lds R24,L213
+ 101E 865F              subi R24,246    ; addi 10
+ 1020 80930C00          sts L214,R24
+ 1024           ;                       if(n>=RING_QUEUE_NUM)
+ 1024 8E31              cpi R24,30
+ 1026 18F0              brlo L280
+ 1028           X149:
+ 1028           ; 				n -= RING_QUEUE_NUM;
+ 1028 8E51              subi R24,30
+ 102A 80930C00          sts L214,R24
+ 102E           L280:
+ 102E           ; 			if(GetRingPieceState(i) == 1)	// 转盘上有剩余干片
+ 102E 00910B00          lds R16,L213
+ 1032 10D8              xcall _GetRingPieceState
+ 1034 402F              mov R20,R16
+ 1036 0130              cpi R16,1
+ 1038 79F4              brne L282
+ 103A           X150:
+ 103A           ; 			{
+ 103A           ; 				MotRunToSite(MOT_TURN_PLATE,n);	// 转盘运行到当前位置
+ 103A 20910C00          lds R18,L214
+ 103E 01E0              ldi R16,1
+ 1040 0E940000          xcall _MotRunToSite
+ 1044           ;                               waitMotTurnPlate = 1;
+ 1044 81E0              ldi R24,1
+ 1046 80930800          sts L210,R24
+ 104A           ;                               mainStep = 16;
+ 104A 80E1              ldi R24,16
+ 104C 80930100          sts L203,R24
+ 1050           ;                               m = 0;          // 废片仓打开计时
+ 1050 2224              clr R2
+ 1052 20920D00          sts L215,R2
+ 1056           ;                       }
+ 1056 85C1              xjmp L253
+ 1058           L282:
+ 1058           ; 			else
+ 1058           ; 				mainStep = 19;		// 继续查找下一个
+ 1058 83E1              ldi R24,19
+ 105A 80930100          sts L203,R24
+ 105E           ;                       break;
+ 105E 81C1              xjmp L253
+ 1060           L284:
+ 1060           ; 		case 16:		// 开始卸载转盘上的干片
+ 1060           ; 			if(GetwasteCardState() == 0)
+ 1060 0E940000          xcall _GetwasteCardState
+ 1064 A02E              mov R10,R16
+ 1066 0023              tst R16
+ 1068 59F5              brne L285
+ 106A           X151:
+ 106A           ; 			{
+ 106A           ; 				if((PINK & 0x02) == 0)
+ 106A 20900601          lds R2,262
+ 106E 21FC              sbrc R2,1
+ 1070 27C0              rjmp L287
+ 1072           X152:
+ 1072           ; 				{
+ 1072           ; 					SetDelayTime(MOT_TURN_PLATE, 10);
+ 1072 2AE0              ldi R18,10
+ 1074 30E0              ldi R19,0
+ 1076 01E0              ldi R16,1
+ 1078 0E940000          xcall _SetDelayTime
+ 107C           ;                                       m ++;
+ 107C 80910D00          lds R24,L215
+ 1080 8F5F              subi R24,255    ; addi 1
+ 1082 80930D00          sts L215,R24
+ 1086           ;                                       if(m == 2)
+ 1086 8230              cpi R24,2
+ 1088 89F4              brne L289
+ 108A           X153:
+ 108A           ; 					{
+ 108A           ; 						Uart0ReUnable;
+ 108A 8091C100          lds R24,193
+ 108E 8F7E              andi R24,239
+ 1090 8093C100          sts 193,R24
+ 1094           ;                                               uart_Printf("%s $   1\r\n",strM0200);
+ 1094 20E0              ldi R18,<_strM0200
+ 1096 30E0              ldi R19,>_strM0200
+ 1098 00E0              ldi R16,<L291
+ 109A 10E0              ldi R17,>L291
+ 109C 0E940000          xcall _uart_Printf
+ 10A0           ;                                               Uart0ReEnable;
+ 10A0 8091C100          lds R24,193
+ 10A4 8061              ori R24,16
+ 10A6 8093C100          sts 193,R24
+ 10AA           ;                                               SetBeepWarning();
+ 10AA 81D1              xcall _SetBeepWarning
+ 10AC           ;                                       }
+ 10AC           L289:
+ 10AC           ; 					if(m == 25)
+ 10AC 80910D00          lds R24,L215
+ 10B0 8931              cpi R24,25
+ 10B2 09F0              breq X159
+ 10B4 56C1              xjmp L253
+ 10B6           X159:
+ 10B6           X154:
+ 10B6           ; 					{
+ 10B6           ; 						SetBeepWarning();
+ 10B6 7BD1              xcall _SetBeepWarning
+ 10B8           ;                                               m = 5;
+ 10B8 85E0              ldi R24,5
+ 10BA 80930D00          sts L215,R24
+ 10BE           ;                                       }
+ 10BE           ;                                       break;
+ 10BE 51C1              xjmp L253
+ 10C0           L287:
+ 10C0           ; 				}
+ 10C0           ; 			}
+ 10C0           L285:
+ 10C0           ; 			SetMotRunPam(MOT_CARD_UNLOAD,200,20,CURRENT_CARD_UNLOAD);
+ 10C0 84E0              ldi R24,4
+ 10C2 8A83              std y+2,R24
+ 10C4 84E1              ldi R24,20
+ 10C6 8883              std y+0,R24
+ 10C8 28EC              ldi R18,200
+ 10CA 05E0              ldi R16,5
+ 10CC 0E940000          xcall _SetMotRunPam
+ 10D0           ;                       MotRunTo(MOT_CARD_UNLOAD,_POS_UNLOAD_OUT);
+ 10D0 20E4              ldi R18,1600
+ 10D2 36E0              ldi R19,6
+ 10D4 05E0              ldi R16,5
+ 10D6 0E940000          xcall _MotRunTo
+ 10DA           ;                       waitMotCardUnLoad = 1;
+ 10DA 81E0              ldi R24,1
+ 10DC 80930700          sts L209,R24
+ 10E0           ;                       mainStep = 17;
+ 10E0 81E1              ldi R24,17
+ 10E2 80930100          sts L203,R24
+ 10E6           ;                       break;
+ 10E6 3DC1              xjmp L253
+ 10E8           L294:
+ 10E8           ; 		case 17:
+ 10E8           ; 			SetDelayTime(MOT_SAMP_TRUN, 10);
+ 10E8 2AE0              ldi R18,10
+ 10EA 30E0              ldi R19,0
+ 10EC 02E0              ldi R16,2
+ 10EE 0E940000          xcall _SetDelayTime
+ 10F2           ;                       mainStep = 18;
+ 10F2 82E1              ldi R24,18
+ 10F4 80930100          sts L203,R24
+ 10F8           ;                       break;
+ 10F8 34C1              xjmp L253
+ 10FA           L295:
+ 10FA           ; 		case 18:	// 卸片小车回到起始点
+ 10FA           ; 			MotRunTo(MOT_CARD_UNLOAD,0);
+ 10FA 2227              clr R18
+ 10FC 3327              clr R19
+ 10FE 05E0              ldi R16,5
+ 1100 0E940000          xcall _MotRunTo
+ 1104           ;                       waitMotCardUnLoad = 1;
+ 1104 81E0              ldi R24,1
+ 1106 80930700          sts L209,R24
+ 110A           ;                       mainStep = 19;
+ 110A 83E1              ldi R24,19
+ 110C 80930100          sts L203,R24
+ 1110           ;                       break;
+ 1110 28C1              xjmp L253
+ 1112           L296:
+ 1112           ; 		case 19:
+ 1112           ; 			i++;
+ 1112 80910B00          lds R24,L213
+ 1116 8F5F              subi R24,255    ; addi 1
+ 1118 80930B00          sts L213,R24
+ 111C           ;                       if(i < RING_QUEUE_NUM)  // 未完继续
+ 111C 8E31              cpi R24,30
+ 111E 20F4              brsh L297
+ 1120           X155:
+ 1120           ; 				mainStep = 15;
+ 1120 8FE0              ldi R24,15
+ 1122 80930100          sts L203,R24
+ 1126 1DC1              xjmp L253
+ 1128           L297:
+ 1128           ; 			else
+ 1128           ; 			{
+ 1128           ; 				mainStep = 20;	// 检查结束
+ 1128 84E1              ldi R24,20
+ 112A 80930100          sts L203,R24
+ 112E           ;                               Uart0ReUnable;
+ 112E 8091C100          lds R24,193
+ 1132 8F7E              andi R24,239
+ 1134 8093C100          sts 193,R24
+ 1138           ;                               uart_Printf("%s\r\n",strM2114);
+ 1138 20E0              ldi R18,<_strM2114
+ 113A 30E0              ldi R19,>_strM2114
+ 113C 00E0              ldi R16,<L257
+ 113E 10E0              ldi R17,>L257
+ 1140 0E940000          xcall _uart_Printf
+ 1144           ;                               Uart0ReEnable;
+ 1144 8091C100          lds R24,193
+ 1148 8061              ori R24,16
+ 114A 8093C100          sts 193,R24
+ 114E           ;                       }
+ 114E           ;                       break;
+ 114E 09C1              xjmp L253
+ 1150           L299:
+ 1150           ; 		case 20:	// 检查片仓小车上是否有干片
+ 1150           ; 			SetMotRunPam(MOT_STORE_CARD_MOVE,64,10,CURRENT_STORE_MOVE);
+ 1150 8AE0              ldi R24,10
+ 1152 8A83              std y+2,R24
+ 1154 8883              std y+0,R24
+ 1156 20E4              ldi R18,64
+ 1158 08E0              ldi R16,8
+ 115A 0E940000          xcall _SetMotRunPam
+ 115E           ;                       MotRunTo(MOT_STORE_CARD_MOVE,100);
+ 115E 24E6              ldi R18,100
+ 1160 30E0              ldi R19,0
+ 1162 08E0              ldi R16,8
+ 1164 0E940000          xcall _MotRunTo
+ 1168           ;                       waitMotCardTrolley = 1;
+ 1168 81E0              ldi R24,1
+ 116A 80930500          sts L207,R24
+ 116E           ;                       mainStep = 21;
+ 116E 85E1              ldi R24,21
+ 1170 80930100          sts L203,R24
+ 1174           ;                       break;
+ 1174 F6C0              xjmp L253
+ 1176           L300:
+ 1176           ; 		case 21:
+ 1176           ; 			i = PINL & 0x04;					// 读取取片检测传感器空闲状态
+ 1176 80910901          lds R24,265
+ 117A 8470              andi R24,4
+ 117C 80930B00          sts L213,R24
+ 1180           ;                       MotRunTo(MOT_STORE_CARD_MOVE,0);        // 取片小车运行到零位
+ 1180 2227              clr R18
+ 1182 3327              clr R19
+ 1184 08E0              ldi R16,8
+ 1186 0E940000          xcall _MotRunTo
+ 118A           ;                       waitMotCardTrolley = 1;
+ 118A 81E0              ldi R24,1
+ 118C 80930500          sts L207,R24
+ 1190           ;                       mainStep = 22;
+ 1190 86E1              ldi R24,22
+ 1192 80930100          sts L203,R24
+ 1196           ;                       break;
+ 1196 E5C0              xjmp L253
+ 1198           L301:
+ 1198           ; 		case 22:
+ 1198           ; 			n = PINL & 0x04;					// 读取取片检测传感器状态
+ 1198 80910901          lds R24,265
+ 119C 8470              andi R24,4
+ 119E 80930C00          sts L214,R24
+ 11A2           ;                       if(i != n)              // 取片小车上有剩余干片
+ 11A2 30900B00          lds R3,L213
+ 11A6 3816              cp R3,R24
+ 11A8 D9F0              breq L302
+ 11AA           X156:
+ 11AA           ; 			{
+ 11AA           ; 				MotRunToSite(MOT_TURN_PLATE,0);	// 转盘运行到0号位置
+ 11AA 2227              clr R18
+ 11AC 01E0              ldi R16,1
+ 11AE 0E940000          xcall _MotRunToSite
+ 11B2           ;                               waitMotTurnPlate = 1;
+ 11B2 81E0              ldi R24,1
+ 11B4 80930800          sts L210,R24
+ 11B8           ;                               mainStep = 23;
+ 11B8 87E1              ldi R24,23
+ 11BA 80930100          sts L203,R24
+ 11BE           ;                               Uart0ReUnable;
+ 11BE 8091C100          lds R24,193
+ 11C2 8F7E              andi R24,239
+ 11C4 8093C100          sts 193,R24
+ 11C8           ;                               uart_Printf("%s\r\n",strM2115);
+ 11C8 20E0              ldi R18,<_strM2115
+ 11CA 30E0              ldi R19,>_strM2115
+ 11CC 00E0              ldi R16,<L257
+ 11CE 10E0              ldi R17,>L257
+ 11D0 0E940000          xcall _uart_Printf
+ 11D4           ;                               Uart0ReEnable;
+ 11D4 8091C100          lds R24,193
+ 11D8 8061              ori R24,16
+ 11DA 8093C100          sts 193,R24
+ 11DE           ;                       }
+ 11DE C1C0              xjmp L253
+ 11E0           L302:
+ 11E0           ; 			else
+ 11E0           ; 				mainStep = 31;		// 取片小车上没有干片, 跳过
+ 11E0 8FE1              ldi R24,31
+ 11E2 80930100          sts L203,R24
+ 11E6           ;                       break;
+ 11E6 BDC0              xjmp L253
+ 11E8           L304:
+ 11E8           ; 		case 23:		// 干片推入转盘
+ 11E8           ; 			SetMotRunPam(MOT_CARD_LOAD,160,10,CURRENT_CARD_LOAD);
+ 11E8 84E0              ldi R24,4
+ 11EA 8A83              std y+2,R24
+ 11EC 8AE0              ldi R24,10
+ 11EE 8883              std y+0,R24
+ 11F0 20EA              ldi R18,160
+ 11F2 04E0              ldi R16,4
+ 11F4 0E940000          xcall _SetMotRunPam
+ 11F8           ;                       MotRunTo(MOT_CARD_LOAD,_POS_CARDLOAD_RING);             // 装片行程94mm/0.08128 = 1156
+ 11F8 20E4              ldi R18,1600
+ 11FA 36E0              ldi R19,6
+ 11FC 04E0              ldi R16,4
+ 11FE 0E940000          xcall _MotRunTo
+ 1202           ;                       waitMotCardLoad = 1;
+ 1202 81E0              ldi R24,1
+ 1204 80930600          sts L208,R24
+ 1208           ;                       mainStep = 24;
+ 1208 88E1              ldi R24,24
+ 120A 80930100          sts L203,R24
+ 120E           ;                       break;
+ 120E A9C0              xjmp L253
+ 1210           L305:
+ 1210           ; 		case 24:
+ 1210           ; 			SetDelayTime(MOT_SAMP_TRUN, 10);
+ 1210 2AE0              ldi R18,10
+ 1212 30E0              ldi R19,0
+ 1214 02E0              ldi R16,2
+ 1216 0E940000          xcall _SetDelayTime
+ 121A           ;                       mainStep = 25;
+ 121A 89E1              ldi R24,25
+ 121C 80930100          sts L203,R24
+ 1220           ;                       break;
+ 1220 A0C0              xjmp L253
+ 1222           L306:
+ 1222           ; 		case 25:		// 干片推入复位
+ 1222           ; 			SetMotRunPam(MOT_CARD_LOAD,200,10,CURRENT_CARD_LOAD);
+ 1222 84E0              ldi R24,4
+ 1224 8A83              std y+2,R24
+ 1226 8AE0              ldi R24,10
+ 1228 8883              std y+0,R24
+ 122A 28EC              ldi R18,200
+ 122C 04E0              ldi R16,4
+ 122E 0E940000          xcall _SetMotRunPam
+ 1232           ;                       MotRunTo(MOT_CARD_LOAD,0);
+ 1232 2227              clr R18
+ 1234 3327              clr R19
+ 1236 04E0              ldi R16,4
+ 1238 0E940000          xcall _MotRunTo
+ 123C           ;                       waitMotCardLoad = 1;
+ 123C 81E0              ldi R24,1
+ 123E 80930600          sts L208,R24
+ 1242           ;                       mainStep = 26;
+ 1242 8AE1              ldi R24,26
+ 1244 80930100          sts L203,R24
+ 1248           ;                       break;
+ 1248 8CC0              xjmp L253
+ 124A           L307:
+ 124A           ; 		case 26:		// 转盘0号转到卸片位置
+ 124A           ; 		//	SetMotRunPam(MOT_TURN_PLATE,240,10,2);
+ 124A           ; 			MotRunToSite(MOT_TURN_PLATE,25);
+ 124A 29E1              ldi R18,25
+ 124C 01E0              ldi R16,1
+ 124E 0E940000          xcall _MotRunToSite
+ 1252           ;                       waitMotTurnPlate = 1;
+ 1252 81E0              ldi R24,1
+ 1254 80930800          sts L210,R24
+ 1258           ;                       mainStep = 27;
+ 1258 8BE1              ldi R24,27
+ 125A 80930100          sts L203,R24
+ 125E           ;                       break;
+ 125E 81C0              xjmp L253
+ 1260           L308:
+ 1260           ; 		case 27:		// 开始卸片
+ 1260           ; 			SetMotRunPam(MOT_CARD_UNLOAD,200,20,CURRENT_CARD_UNLOAD);
+ 1260 84E0              ldi R24,4
+ 1262 8A83              std y+2,R24
+ 1264 84E1              ldi R24,20
+ 1266 8883              std y+0,R24
+ 1268 28EC              ldi R18,200
+ 126A 05E0              ldi R16,5
+ 126C 0E940000          xcall _SetMotRunPam
+ 1270           ;                       MotRunTo(MOT_CARD_UNLOAD,_POS_UNLOAD_OUT);
+ 1270 20E4              ldi R18,1600
+ 1272 36E0              ldi R19,6
+ 1274 05E0              ldi R16,5
+ 1276 0E940000          xcall _MotRunTo
+ 127A           ;                       waitMotCardUnLoad = 1;
+ 127A 81E0              ldi R24,1
+ 127C 80930700          sts L209,R24
+ 1280           ;                       mainStep = 28;
+ 1280 8CE1              ldi R24,28
+ 1282 80930100          sts L203,R24
+ 1286           ;                       break;
+ 1286 6DC0              xjmp L253
+ 1288           L309:
+ 1288           ; 		case 28:
+ 1288           ; 			SetDelayTime(MOT_SAMP_TRUN,10);
+ 1288 2AE0              ldi R18,10
+ 128A 30E0              ldi R19,0
+ 128C 02E0              ldi R16,2
+ 128E 0E940000          xcall _SetDelayTime
+ 1292           ;                       mainStep = 29;
+ 1292 8DE1              ldi R24,29
+ 1294 80930100          sts L203,R24
+ 1298           ;                       break;
+ 1298 64C0              xjmp L253
+ 129A           L310:
+ 129A           ; 		case 29:		// 卸片小车回到起始位
+ 129A           ; 			SetMotRunPam(MOT_CARD_UNLOAD,200,20,2);
+ 129A 82E0              ldi R24,2
+ 129C 8A83              std y+2,R24
+ 129E 84E1              ldi R24,20
+ 12A0 8883              std y+0,R24
+ 12A2 28EC              ldi R18,200
+ 12A4 05E0              ldi R16,5
+ 12A6 0E940000          xcall _SetMotRunPam
+ 12AA           ;                       MotRunTo(MOT_CARD_UNLOAD,_POS_UNLOAD_HOME);
+ 12AA 2227              clr R18
+ 12AC 3327              clr R19
+ 12AE 05E0              ldi R16,5
+ 12B0 0E940000          xcall _MotRunTo
+ 12B4           ;                       waitMotCardUnLoad = 1;
+ 12B4 81E0              ldi R24,1
+ 12B6 80930700          sts L209,R24
+ 12BA           ;                       mainStep = 30;
+ 12BA 8EE1              ldi R24,30
+ 12BC 80930100          sts L203,R24
+ 12C0           ;                       break;
+ 12C0 50C0              xjmp L253
+ 12C2           L311:
+ 12C2           ; 		case 30:
+ 12C2           ; 			Uart0ReUnable;
+ 12C2 8091C100          lds R24,193
+ 12C6 8F7E              andi R24,239
+ 12C8 8093C100          sts 193,R24
+ 12CC           ;                       uart_Printf("%s\r\n",strM2116);
+ 12CC 20E0              ldi R18,<_strM2116
+ 12CE 30E0              ldi R19,>_strM2116
+ 12D0 00E0              ldi R16,<L257
+ 12D2 10E0              ldi R17,>L257
+ 12D4 0E940000          xcall _uart_Printf
+ 12D8           ;                       Uart0ReEnable;
+ 12D8 8091C100          lds R24,193
+ 12DC 8061              ori R24,16
+ 12DE 8093C100          sts 193,R24
+ 12E2           ;                       mainStep = 31;
+ 12E2 8FE1              ldi R24,31
+ 12E4 80930100          sts L203,R24
+ 12E8           ;                       break;
+ 12E8 3CC0              xjmp L253
+ 12EA           L312:
+ 12EA           ; 		case 31:		// 转盘运转到初始状态
+ 12EA           ; 			MotRunToSite(MOT_TURN_PLATE,29);
+ 12EA 2DE1              ldi R18,29
+ 12EC 01E0              ldi R16,1
+ 12EE 0E940000          xcall _MotRunToSite
+ 12F2           ;                       waitMotTurnPlate = 1;
+ 12F2 81E0              ldi R24,1
+ 12F4 80930800          sts L210,R24
+ 12F8           ;                       MotRunTo(MOT_STORE_CARD_MOVE,432);
+ 12F8 20EB              ldi R18,432
+ 12FA 31E0              ldi R19,1
+ 12FC 08E0              ldi R16,8
+ 12FE 0E940000          xcall _MotRunTo
+ 1302           ;                       waitMotCardTrolley = 1;
+ 1302 81E0              ldi R24,1
+ 1304 80930500          sts L207,R24
+ 1308           ;                       mainStep = 32;
+ 1308 80E2              ldi R24,32
+ 130A 80930100          sts L203,R24
+ 130E           ;                       break;
+ 130E 29C0              xjmp L253
+ 1310           L313:
+ 1310           ; 		case 32:
+ 1310           ; 			Uart0ReUnable;
+ 1310 8091C100          lds R24,193
+ 1314 8F7E              andi R24,239
+ 1316 8093C100          sts 193,R24
+ 131A           ;                       uart_Printf("%s\r\n",strM2117);
+ 131A 20E0              ldi R18,<_strM2117
+ 131C 30E0              ldi R19,>_strM2117
+ 131E 00E0              ldi R16,<L257
+ 1320 10E0              ldi R17,>L257
+ 1322 0E940000          xcall _uart_Printf
+ 1326           ;                       Uart0ReEnable;
+ 1326 8091C100          lds R24,193
+ 132A 8061              ori R24,16
+ 132C 8093C100          sts 193,R24
+ 1330           ;                       mainStep = 33;
+ 1330 81E2              ldi R24,33
+ 1332 80930100          sts L203,R24
+ 1336           ;                       break;
+ 1336 15C0              xjmp L253
+ 1338           L314:
+ 1338           ; 		case 33:
+ 1338           ; 			Uart0ReUnable;
+ 1338 8091C100          lds R24,193
+ 133C 8F7E              andi R24,239
+ 133E 8093C100          sts 193,R24
+ 1342           ;                       uart_Printf("%s\r\n", strM1101);
+ 1342 20E0              ldi R18,<_strM1101
+ 1344 30E0              ldi R19,>_strM1101
+ 1346 00E0              ldi R16,<L257
+ 1348 10E0              ldi R17,>L257
+ 134A 0E940000          xcall _uart_Printf
+ 134E           ;                       Uart0ReEnable;
+ 134E 8091C100          lds R24,193
+ 1352 8061              ori R24,16
+ 1354 8093C100          sts 193,R24
+ 1358           ;                       mainStep = 0;
+ 1358 2224              clr R2
+ 135A 20920100          sts L203,R2
+ 135E           ;                       return 1;
+ 135E 01E0              ldi R16,1
+ 1360 01C0              xjmp L202
+ 1362           L252:
+ 1362           L253:
+ 1362           ; 			break;
+ 1362           ; 		}
+ 1362           ; 	return 0;
+ 1362 0027              clr R16
+ 1364           L202:
+ 1364                   .dbline 0 ; func end
+ 1364 2396              adiw R28,3
+ 1366 0C940000          xjmp pop_xgset300C
+                        .area bss(ram, con, rel)
+ 000E           L317:
+ 000E                   .blkb 1
+                        .area text(rom, con, rel)
+                ;            key -> R16
+                        .even
+ 136A           _WaitStartKey::
+ 136A           ; }
+ 136A           ; 
+ 136A           ; // 等待吸样按键
+ 136A           ; unsigned char WaitStartKey(void){
+ 136A           ; 	// 等待启动按键按下
+ 136A           ; 	static unsigned char callCnt;
+ 136A           ; 	unsigned char key;
+ 136A           ; 	
+ 136A           ; 	key = (PINJ & 0x40);
+ 136A 00910301          lds R16,259
+ 136E 0074              andi R16,64
+ 1370           ;       if(callCnt == 0){
+ 1370 20900E00          lds R2,L317
+ 1374 2220              tst R2
+ 1376 31F4              brne L318
+ 1378           X160:
+ 1378           ; 		if(key == 0)	// 按键在松开是启动，如果按键一直按着视为无动作
+ 1378 0023              tst R16
+ 137A 59F4              brne L319
+ 137C           X161:
+ 137C           ; 			callCnt = 1;
+ 137C 81E0              ldi R24,1
+ 137E 80930E00          sts L317,R24
+ 1382           ;               }
+ 1382 07C0              xjmp L319
+ 1384           L318:
+ 1384           ; 	else {
+ 1384           ; 		if(key == 0x40){	// 按键按下
+ 1384 0034              cpi R16,64
+ 1386 29F4              brne L322
+ 1388           X162:
+ 1388           ; 			callCnt = 0;
+ 1388 2224              clr R2
+ 138A 20920E00          sts L317,R2
+ 138E           ;                       return 1;
+ 138E 01E0              ldi R16,1
+ 1390 01C0              xjmp L316
+ 1392           L322:
+ 1392           ; 			}
+ 1392           ; 		}
+ 1392           L319:
+ 1392           ; 	return 0;
+ 1392 0027              clr R16
+ 1394           L316:
+ 1394                   .dbline 0 ; func end
+ 1394 0895              ret
+                        .area data(ram, con, rel)
+ 0009           _BeepNum:
+ 0009                   .blkb 1
+                        .area idata
+ 0009 00                .byte 0
+                        .area data(ram, con, rel)
+ 000A           _BeepState:
+ 000A                   .blkb 1
+                        .area idata
+ 000A 00                .byte 0
+                        .area data(ram, con, rel)
+                        .area text(rom, con, rel)
+                        .even
+ 1396           _SetBeepBusy::
+ 1396           ; }
+ 1396           ; 
+ 1396           ; /********************************************* 蜂鸣提示音 **********************************************/
+ 1396           ; static unsigned char BeepNum=0;
+ 1396           ; static unsigned char BeepState=0;
+ 1396           ; static unsigned int BeepCnt;
+ 1396           ; 
+ 1396           ; void SetBeepBusy(void){
+ 1396           ; 	// 1短 1长
+ 1396           ; 	BeepState=1;
+ 1396 81E0              ldi R24,1
+ 1398 80930A00          sts _BeepState,R24
+ 139C           ;       BeepNum = 0;
+ 139C 2224              clr R2
+ 139E 20920900          sts _BeepNum,R2
+ 13A2           ;       BeepCnt=0;
+ 13A2 3324              clr R3
+ 13A4 30921000          sts _BeepCnt+1,R3
+ 13A8 20920F00          sts _BeepCnt,R2
+ 13AC           L324:
+ 13AC                   .dbline 0 ; func end
+ 13AC 0895              ret
+                        .even
+ 13AE           _SetBeepWarning::
+ 13AE           ; }
+ 13AE           ; void SetBeepWarning(void){
+ 13AE           ; 	// 1长音
+ 13AE           ; 	BeepState=2;
+ 13AE 82E0              ldi R24,2
+ 13B0 80930A00          sts _BeepState,R24
+ 13B4           ;       BeepNum = 0;
+ 13B4 2224              clr R2
+ 13B6 20920900          sts _BeepNum,R2
+ 13BA           ;       BeepCnt=0;
+ 13BA 3324              clr R3
+ 13BC 30921000          sts _BeepCnt+1,R3
+ 13C0 20920F00          sts _BeepCnt,R2
+ 13C4           L325:
+ 13C4                   .dbline 0 ; func end
+ 13C4 0895              ret
+                        .even
+ 13C6           _SetBeepAck::
+ 13C6           ; }
+ 13C6           ; void SetBeepAck(void){
+ 13C6           ; 	// 1短音
+ 13C6           ; 	BeepState=3;
+ 13C6 83E0              ldi R24,3
+ 13C8 80930A00          sts _BeepState,R24
+ 13CC           ;       BeepNum = 0;
+ 13CC 2224              clr R2
+ 13CE 20920900          sts _BeepNum,R2
+ 13D2           ;       BeepCnt=0;
+ 13D2 3324              clr R3
+ 13D4 30921000          sts _BeepCnt+1,R3
+ 13D8 20920F00          sts _BeepCnt,R2
+ 13DC           L326:
+ 13DC                   .dbline 0 ; func end
+ 13DC 0895              ret
+                        .even
+ 13DE           _SetBeepPrompt::
+ 13DE           ; 	
+ 13DE           ; }
+ 13DE           ; void SetBeepPrompt(void){
+ 13DE           ; 	// 2短音
+ 13DE           ; 	BeepState=4;
+ 13DE 84E0              ldi R24,4
+ 13E0 80930A00          sts _BeepState,R24
+ 13E4           ;       BeepNum = 0;
+ 13E4 2224              clr R2
+ 13E6 20920900          sts _BeepNum,R2
+ 13EA           ;       BeepCnt=0;
+ 13EA 3324              clr R3
+ 13EC 30921000          sts _BeepCnt+1,R3
+ 13F0 20920F00          sts _BeepCnt,R2
+ 13F4           L327:
+ 13F4                   .dbline 0 ; func end
+ 13F4 0895              ret
+                        .even
+ 13F6           _SetBeepError::
+ 13F6           ; }
+ 13F6           ; void SetBeepError(void){
+ 13F6           ; 	// 连续长音
+ 13F6           ; 	BeepState=5;
+ 13F6 85E0              ldi R24,5
+ 13F8 80930A00          sts _BeepState,R24
+ 13FC           ;       BeepNum = 0;
+ 13FC 2224              clr R2
+ 13FE 20920900          sts _BeepNum,R2
+ 1402           ;       BeepCnt=0;
+ 1402 3324              clr R3
+ 1404 30921000          sts _BeepCnt+1,R3
+ 1408 20920F00          sts _BeepCnt,R2
+ 140C           L328:
+ 140C                   .dbline 0 ; func end
+ 140C 0895              ret
+ 140E           ;              n -> R16
+                        .even
+ 140E           _SetBeep::
+ 140E           ; }
+ 140E           ; void SetBeep(unsigned char n){
+ 140E           ; 	BeepState=0;
+ 140E 2224              clr R2
+ 1410 20920A00          sts _BeepState,R2
+ 1414           ;       BeepNum = n;
+ 1414 00930900          sts _BeepNum,R16
+ 1418           ;       BeepCnt=0;
+ 1418 3324              clr R3
+ 141A 30921000          sts _BeepCnt+1,R3
+ 141E 20920F00          sts _BeepCnt,R2
+ 1422           L329:
+ 1422                   .dbline 0 ; func end
+ 1422 0895              ret
+                        .even
+ 1424           _BeepStop::
+ 1424           ; }
+ 1424           ; void BeepStop(void){
+ 1424           ; 	BeepState=0;
+ 1424 2224              clr R2
+ 1426 20920A00          sts _BeepState,R2
+ 142A           ;       BeepNum = 0;
+ 142A 20920900          sts _BeepNum,R2
+ 142E           ;       BeepCnt=0;
+ 142E 3324              clr R3
+ 1430 30921000          sts _BeepCnt+1,R3
+ 1434 20920F00          sts _BeepCnt,R2
+ 1438           L330:
+ 1438                   .dbline 0 ; func end
+ 1438 0895              ret
+                        .even
+ 143A           _Beep::
+ 143A           ; }
+ 143A           ; 
+ 143A           ; void Beep(void){
+ 143A           ; 	BeepCnt ++;
+ 143A 80910F00          lds R24,_BeepCnt
+ 143E 90911000          lds R25,_BeepCnt+1
+ 1442 0196              adiw R24,1
+ 1444 90931000          sts _BeepCnt+1,R25
+ 1448 80930F00          sts _BeepCnt,R24
+ 144C           ;       switch(BeepState){
+ 144C 00910A00          lds R16,_BeepState
+ 1450 1127              clr R17
+ 1452 0030              cpi R16,0
+ 1454 0107              cpc R16,R17
+ 1456 D1F0              breq L335
+ 1458           X163:
+ 1458 0130              cpi R16,1
+ 145A E0E0              ldi R30,0
+ 145C 1E07              cpc R17,R30
+ 145E 09F4              brne X202
+ 1460 4CC0              xjmp L345
+ 1462           X202:
+ 1462           X164:
+ 1462 0230              cpi R16,2
+ 1464 E0E0              ldi R30,0
+ 1466 1E07              cpc R17,R30
+ 1468 09F4              brne X203
+ 146A 96C0              xjmp L357
+ 146C           X203:
+ 146C           X165:
+ 146C 0330              cpi R16,3
+ 146E E0E0              ldi R30,0
+ 1470 1E07              cpc R17,R30
+ 1472 09F4              brne X204
+ 1474 BFC0              xjmp L365
+ 1476           X204:
+ 1476           X166:
+ 1476 0430              cpi R16,4
+ 1478 E0E0              ldi R30,0
+ 147A 1E07              cpc R17,R30
+ 147C 09F4              brne X205
+ 147E E8C0              xjmp L373
+ 1480           X205:
+ 1480           X167:
+ 1480 0530              cpi R16,5
+ 1482 E0E0              ldi R30,0
+ 1484 1E07              cpc R17,R30
+ 1486 09F4              brne X206
+ 1488 31C1              xjmp L385
+ 148A           X206:
+ 148A           X168:
+ 148A 5BC1              xjmp L333
+ 148C           L335:
+ 148C           ; 		case 0:
+ 148C           ; 			if(BeepNum){
+ 148C 20900900          lds R2,_BeepNum
+ 1490 2220              tst R2
+ 1492 09F4              brne X207
+ 1494 56C1              xjmp L333
+ 1496           X207:
+ 1496           X169:
+ 1496           ; 				switch(BeepCnt){
+ 1496 20900F00          lds R2,_BeepCnt
+ 149A 30901000          lds R3,_BeepCnt+1
+ 149E C101              movw R24,R2
+ 14A0 883C              cpi R24,200
+ 14A2 E0E0              ldi R30,0
+ 14A4 9E07              cpc R25,R30
+ 14A6 C9F0              breq L341
+ 14A8           X170:
+ 14A8 88EC              ldi R24,200
+ 14AA 90E0              ldi R25,0
+ 14AC 8215              cp R24,R2
+ 14AE 9305              cpc R25,R3
+ 14B0 4CF0              brlt L344
+ 14B2           X171:
+ 14B2           L343:
+ 14B2 80910F00          lds R24,_BeepCnt
+ 14B6 90911000          lds R25,_BeepCnt+1
+ 14BA 8A30              cpi R24,10
+ 14BC E0E0              ldi R30,0
+ 14BE 9E07              cpc R25,R30
+ 14C0 51F0              breq L340
+ 14C2           X172:
+ 14C2 3FC1              xjmp L333
+ 14C4           L344:
+ 14C4 80910F00          lds R24,_BeepCnt
+ 14C8 90911000          lds R25,_BeepCnt+1
+ 14CC 843F              cpi R24,244
+ 14CE E1E0              ldi R30,1
+ 14D0 9E07              cpc R25,R30
+ 14D2 39F0              breq L342
+ 14D4           X173:
+ 14D4 36C1              xjmp L333
+ 14D6           L340:
+ 14D6           ; 					case 10:	DDRB  |= 0x80;				break;
+ 14D6 279A              sbi 0x4,7
+ 14D8 34C1              xjmp L333
+ 14DA           L341:
+ 14DA           ; 					case 200:	DDRB  &= 0x7f;				break;
+ 14DA 84B1              in R24,0x4
+ 14DC 8F77              andi R24,127
+ 14DE 84B9              out 0x4,R24
+ 14E0 30C1              xjmp L333
+ 14E2           L342:
+ 14E2           ; 					case 500:	BeepCnt = 0;	BeepNum --;	break;
+ 14E2 2224              clr R2
+ 14E4 3324              clr R3
+ 14E6 30921000          sts _BeepCnt+1,R3
+ 14EA 20920F00          sts _BeepCnt,R2
+ 14EE 80910900          lds R24,_BeepNum
+ 14F2 8150              subi R24,1
+ 14F4 80930900          sts _BeepNum,R24
+ 14F8           ;                                       default:        break;
+ 14F8           ;                               }
+ 14F8           ;                       }
+ 14F8           ;                       break;
+ 14F8 24C1              xjmp L333
+ 14FA           L345:
+ 14FA           ; 		case 1:// 提示忙 1短 1长
+ 14FA           ; 			switch(BeepCnt){
+ 14FA 20900F00          lds R2,_BeepCnt
+ 14FE 30901000          lds R3,_BeepCnt+1
+ 1502 C101              movw R24,R2
+ 1504 843F              cpi R24,244
+ 1506 E1E0              ldi R30,1
+ 1508 9E07              cpc R25,R30
+ 150A B9F1              breq L350
+ 150C           X174:
+ 150C 84EF              ldi R24,500
+ 150E 91E0              ldi R25,1
+ 1510 8215              cp R24,R2
+ 1512 9305              cpc R25,R3
+ 1514 B4F0              brlt L354
+ 1516           X175:
+ 1516           L353:
+ 1516 00910F00          lds R16,_BeepCnt
+ 151A 10911000          lds R17,_BeepCnt+1
+ 151E 0A30              cpi R16,10
+ 1520 E0E0              ldi R30,0
+ 1522 1E07              cpc R17,R30
+ 1524 21F1              breq L348
+ 1526           X176:
+ 1526 0A30              cpi R16,10
+ 1528 E0E0              ldi R30,0
+ 152A 1E07              cpc R17,R30
+ 152C 0CF4              brge X208
+ 152E 09C1              xjmp L333
+ 1530           X208:
+ 1530           X177:
+ 1530           L355:
+ 1530 80910F00          lds R24,_BeepCnt
+ 1534 90911000          lds R25,_BeepCnt+1
+ 1538 883C              cpi R24,200
+ 153A E0E0              ldi R30,0
+ 153C 9E07              cpc R25,R30
+ 153E C9F0              breq L349
+ 1540           X178:
+ 1540 00C1              xjmp L333
+ 1542           L354:
+ 1542 00910F00          lds R16,_BeepCnt
+ 1546 10911000          lds R17,_BeepCnt+1
+ 154A 003D              cpi R16,208
+ 154C E7E0              ldi R30,7
+ 154E 1E07              cpc R17,R30
+ 1550 B1F0              breq L351
+ 1552           X179:
+ 1552 003D              cpi R16,208
+ 1554 E7E0              ldi R30,7
+ 1556 1E07              cpc R17,R30
+ 1558 0CF4              brge X209
+ 155A F3C0              xjmp L333
+ 155C           X209:
+ 155C           X180:
+ 155C           L356:
+ 155C 80910F00          lds R24,_BeepCnt
+ 1560 90911000          lds R25,_BeepCnt+1
+ 1564 843C              cpi R24,196
+ 1566 E9E0              ldi R30,9
+ 1568 9E07              cpc R25,R30
+ 156A 69F0              breq L352
+ 156C           X181:
+ 156C EAC0              xjmp L333
+ 156E           L348:
+ 156E           ; 					case 10:	DDRB  |= 0x80;				break;
+ 156E 279A              sbi 0x4,7
+ 1570 E8C0              xjmp L333
+ 1572           L349:
+ 1572           ; 					case 200:	DDRB  &= 0x7f;				break;
+ 1572 84B1              in R24,0x4
+ 1574 8F77              andi R24,127
+ 1576 84B9              out 0x4,R24
+ 1578 E4C0              xjmp L333
+ 157A           L350:
+ 157A           ; 					case 500:	DDRB  |= 0x80;				break;
+ 157A 279A              sbi 0x4,7
+ 157C E2C0              xjmp L333
+ 157E           L351:
+ 157E           ; 					case 2000:	DDRB  &= 0x7f;				break;
+ 157E 84B1              in R24,0x4
+ 1580 8F77              andi R24,127
+ 1582 84B9              out 0x4,R24
+ 1584 DEC0              xjmp L333
+ 1586           L352:
+ 1586           ; 					case 2500:	BeepCnt = 0; BeepState = 0;	break;
+ 1586 2224              clr R2
+ 1588 3324              clr R3
+ 158A 30921000          sts _BeepCnt+1,R3
+ 158E 20920F00          sts _BeepCnt,R2
+ 1592 20920A00          sts _BeepState,R2
+ 1596           ;                                       default:        break;
+ 1596           ;                               }
+ 1596           ;                       break;
+ 1596 D5C0              xjmp L333
+ 1598           L357:
+ 1598           ; 		case 2:// 提示警告  1长音
+ 1598           ; 			switch(BeepCnt){
+ 1598 00910F00          lds R16,_BeepCnt
+ 159C 10911000          lds R17,_BeepCnt+1
+ 15A0 043C              cpi R16,196
+ 15A2 E9E0              ldi R30,9
+ 15A4 1E07              cpc R17,R30
+ 15A6 C9F0              breq L361
+ 15A8           X182:
+ 15A8 84EC              ldi R24,2500
+ 15AA 99E0              ldi R25,9
+ 15AC 8017              cp R24,R16
+ 15AE 9107              cpc R25,R17
+ 15B0 4CF0              brlt L364
+ 15B2           X183:
+ 15B2           L363:
+ 15B2 80910F00          lds R24,_BeepCnt
+ 15B6 90911000          lds R25,_BeepCnt+1
+ 15BA 8A30              cpi R24,10
+ 15BC E0E0              ldi R30,0
+ 15BE 9E07              cpc R25,R30
+ 15C0 51F0              breq L360
+ 15C2           X184:
+ 15C2 BFC0              xjmp L333
+ 15C4           L364:
+ 15C4 80910F00          lds R24,_BeepCnt
+ 15C8 90911000          lds R25,_BeepCnt+1
+ 15CC 883B              cpi R24,184
+ 15CE EBE0              ldi R30,11
+ 15D0 9E07              cpc R25,R30
+ 15D2 39F0              breq L362
+ 15D4           X185:
+ 15D4 B6C0              xjmp L333
+ 15D6           L360:
+ 15D6           ; 					case 10:	DDRB  |= 0x80;				break;
+ 15D6 279A              sbi 0x4,7
+ 15D8 B4C0              xjmp L333
+ 15DA           L361:
+ 15DA           ; 					case 2500:	DDRB  &= 0x7f;				break;
+ 15DA 84B1              in R24,0x4
+ 15DC 8F77              andi R24,127
+ 15DE 84B9              out 0x4,R24
+ 15E0 B0C0              xjmp L333
+ 15E2           L362:
+ 15E2           ; 					case 3000:	BeepCnt = 0; BeepState = 0;	break;
+ 15E2 2224              clr R2
+ 15E4 3324              clr R3
+ 15E6 30921000          sts _BeepCnt+1,R3
+ 15EA 20920F00          sts _BeepCnt,R2
+ 15EE 20920A00          sts _BeepState,R2
+ 15F2           ;                                       default:        break;
+ 15F2           ;                               }
+ 15F2           ;                       break;
+ 15F2 A7C0              xjmp L333
+ 15F4           L365:
+ 15F4           ; 		case 3:	// 操作应答  1短音
+ 15F4           ; 			switch(BeepCnt){
+ 15F4 00910F00          lds R16,_BeepCnt
+ 15F8 10911000          lds R17,_BeepCnt+1
+ 15FC 083C              cpi R16,200
+ 15FE E0E0              ldi R30,0
+ 1600 1E07              cpc R17,R30
+ 1602 C9F0              breq L369
+ 1604           X186:
+ 1604 88EC              ldi R24,200
+ 1606 90E0              ldi R25,0
+ 1608 8017              cp R24,R16
+ 160A 9107              cpc R25,R17
+ 160C 4CF0              brlt L372
+ 160E           X187:
+ 160E           L371:
+ 160E 80910F00          lds R24,_BeepCnt
+ 1612 90911000          lds R25,_BeepCnt+1
+ 1616 8A30              cpi R24,10
+ 1618 E0E0              ldi R30,0
+ 161A 9E07              cpc R25,R30
+ 161C 51F0              breq L368
+ 161E           X188:
+ 161E 91C0              xjmp L333
+ 1620           L372:
+ 1620 80910F00          lds R24,_BeepCnt
+ 1624 90911000          lds R25,_BeepCnt+1
+ 1628 843F              cpi R24,244
+ 162A E1E0              ldi R30,1
+ 162C 9E07              cpc R25,R30
+ 162E 39F0              breq L370
+ 1630           X189:
+ 1630 88C0              xjmp L333
+ 1632           L368:
+ 1632           ; 					case 10:	DDRB  |= 0x80;				break;
+ 1632 279A              sbi 0x4,7
+ 1634 86C0              xjmp L333
+ 1636           L369:
+ 1636           ; 					case 200:	DDRB  &= 0x7f;				break;
+ 1636 84B1              in R24,0x4
+ 1638 8F77              andi R24,127
+ 163A 84B9              out 0x4,R24
+ 163C 82C0              xjmp L333
+ 163E           L370:
+ 163E           ; 					case 500:	BeepCnt = 0; BeepState = 0;	break;
+ 163E 2224              clr R2
+ 1640 3324              clr R3
+ 1642 30921000          sts _BeepCnt+1,R3
+ 1646 20920F00          sts _BeepCnt,R2
+ 164A 20920A00          sts _BeepState,R2
+ 164E           ;                                       default:        break;
+ 164E           ;                               }
+ 164E           ;                       break;
+ 164E 79C0              xjmp L333
+ 1650           L373:
+ 1650           ; 		case 4:	// 输出提示  2短音
+ 1650           ; 			switch(BeepCnt){
+ 1650 00910F00          lds R16,_BeepCnt
+ 1654 10911000          lds R17,_BeepCnt+1
+ 1658 043F              cpi R16,244
+ 165A E1E0              ldi R30,1
+ 165C 1E07              cpc R17,R30
+ 165E B9F1              breq L378
+ 1660           X190:
+ 1660 84EF              ldi R24,500
+ 1662 91E0              ldi R25,1
+ 1664 8017              cp R24,R16
+ 1666 9107              cpc R25,R17
+ 1668 B4F0              brlt L382
+ 166A           X191:
+ 166A           L381:
+ 166A 00910F00          lds R16,_BeepCnt
+ 166E 10911000          lds R17,_BeepCnt+1
+ 1672 0A30              cpi R16,10
+ 1674 E0E0              ldi R30,0
+ 1676 1E07              cpc R17,R30
+ 1678 21F1              breq L376
+ 167A           X192:
+ 167A 0A30              cpi R16,10
+ 167C E0E0              ldi R30,0
+ 167E 1E07              cpc R17,R30
+ 1680 0CF4              brge X210
+ 1682 5FC0              xjmp L333
+ 1684           X210:
+ 1684           X193:
+ 1684           L383:
+ 1684 80910F00          lds R24,_BeepCnt
+ 1688 90911000          lds R25,_BeepCnt+1
+ 168C 883C              cpi R24,200
+ 168E E0E0              ldi R30,0
+ 1690 9E07              cpc R25,R30
+ 1692 C9F0              breq L377
+ 1694           X194:
+ 1694 56C0              xjmp L333
+ 1696           L382:
+ 1696 00910F00          lds R16,_BeepCnt
+ 169A 10911000          lds R17,_BeepCnt+1
+ 169E 0C3B              cpi R16,188
+ 16A0 E2E0              ldi R30,2
+ 16A2 1E07              cpc R17,R30
+ 16A4 B1F0              breq L379
+ 16A6           X195:
+ 16A6 0C3B              cpi R16,188
+ 16A8 E2E0              ldi R30,2
+ 16AA 1E07              cpc R17,R30
+ 16AC 0CF4              brge X211
+ 16AE 49C0              xjmp L333
+ 16B0           X211:
+ 16B0           X196:
+ 16B0           L384:
+ 16B0 80910F00          lds R24,_BeepCnt
+ 16B4 90911000          lds R25,_BeepCnt+1
+ 16B8 883E              cpi R24,232
+ 16BA E3E0              ldi R30,3
+ 16BC 9E07              cpc R25,R30
+ 16BE 69F0              breq L380
+ 16C0           X197:
+ 16C0 40C0              xjmp L333
+ 16C2           L376:
+ 16C2           ; 					case 10:	DDRB  |= 0x80;				break;
+ 16C2 279A              sbi 0x4,7
+ 16C4 3EC0              xjmp L333
+ 16C6           L377:
+ 16C6           ; 					case 200:	DDRB  &= 0x7f;				break;
+ 16C6 84B1              in R24,0x4
+ 16C8 8F77              andi R24,127
+ 16CA 84B9              out 0x4,R24
+ 16CC 3AC0              xjmp L333
+ 16CE           L378:
+ 16CE           ; 					case 500:	DDRB  |= 0x80;				break;
+ 16CE 279A              sbi 0x4,7
+ 16D0 38C0              xjmp L333
+ 16D2           L379:
+ 16D2           ; 					case 700:	DDRB  &= 0x7f;				break;
+ 16D2 84B1              in R24,0x4
+ 16D4 8F77              andi R24,127
+ 16D6 84B9              out 0x4,R24
+ 16D8 34C0              xjmp L333
+ 16DA           L380:
+ 16DA           ; 					case 1000:	BeepCnt = 0; BeepState = 0;	break;
+ 16DA 2224              clr R2
+ 16DC 3324              clr R3
+ 16DE 30921000          sts _BeepCnt+1,R3
+ 16E2 20920F00          sts _BeepCnt,R2
+ 16E6 20920A00          sts _BeepState,R2
+ 16EA           ;                                       default:        break;
+ 16EA           ;                               }
+ 16EA           ;                       break;
+ 16EA 2BC0              xjmp L333
+ 16EC           L385:
+ 16EC           ; 		case 5:	// 错误 连续长音
+ 16EC           ; 			switch(BeepCnt){
+ 16EC 00910F00          lds R16,_BeepCnt
+ 16F0 10911000          lds R17,_BeepCnt+1
+ 16F4 043C              cpi R16,196
+ 16F6 E9E0              ldi R30,9
+ 16F8 1E07              cpc R17,R30
+ 16FA C9F0              breq L389
+ 16FC           X198:
+ 16FC 84EC              ldi R24,2500
+ 16FE 99E0              ldi R25,9
+ 1700 8017              cp R24,R16
+ 1702 9107              cpc R25,R17
+ 1704 4CF0              brlt L392
+ 1706           X199:
+ 1706           L391:
+ 1706 80910F00          lds R24,_BeepCnt
+ 170A 90911000          lds R25,_BeepCnt+1
+ 170E 8A30              cpi R24,10
+ 1710 E0E0              ldi R30,0
+ 1712 9E07              cpc R25,R30
+ 1714 51F0              breq L388
+ 1716           X200:
+ 1716 15C0              xjmp L333
+ 1718           L392:
+ 1718 80910F00          lds R24,_BeepCnt
+ 171C 90911000          lds R25,_BeepCnt+1
+ 1720 883B              cpi R24,184
+ 1722 EBE0              ldi R30,11
+ 1724 9E07              cpc R25,R30
+ 1726 39F0              breq L390
+ 1728           X201:
+ 1728 0CC0              xjmp L333
+ 172A           L388:
+ 172A           ; 					case 10:	DDRB  |= 0x80;				break;
+ 172A 279A              sbi 0x4,7
+ 172C 0AC0              xjmp L333
+ 172E           L389:
+ 172E           ; 					case 2500:	DDRB  &= 0x7f;				break;
+ 172E 84B1              in R24,0x4
+ 1730 8F77              andi R24,127
+ 1732 84B9              out 0x4,R24
+ 1734 06C0              xjmp L333
+ 1736           L390:
+ 1736           ; 					case 3000:	BeepCnt = 0; 				break;
+ 1736 2224              clr R2
+ 1738 3324              clr R3
+ 173A 30921000          sts _BeepCnt+1,R3
+ 173E 20920F00          sts _BeepCnt,R2
+ 1742           ;                                       default:        break;
+ 1742           ;                               }
+ 1742           ;                       break;
+ 1742           ;               default:
+ 1742           ;                       break;
+ 1742           L333:
+ 1742           L331:
+ 1742                   .dbline 0 ; func end
+ 1742 0895              ret
+                        .even
+ 1744           _SetStateLedBusy::
+ 1744           ; 		}
+ 1744           ; }
+ 1744           ; 
+ 1744           ; // 设置状态指示灯
+ 1744           ; void SetStateLedBusy(void)
+ 1744           ; {
+ 1744           ; 	DDRE |= 0x30;
+ 1744 8DB1              in R24,0xd
+ 1746 8063              ori R24,48
+ 1748 8DB9              out 0xd,R24
+ 174A           ;       PORTE |= 0x10;
+ 174A 749A              sbi 0xe,4
+ 174C           ;       PORTE &= 0xdf;
+ 174C 8EB1              in R24,0xe
+ 174E 8F7D              andi R24,223
+ 1750 8EB9              out 0xe,R24
+ 1752           ;       if(_SampSW == 1)                // 未锁定按键,LED变红
+ 1752 80910000          lds R24,__SampSW
+ 1756 8130              cpi R24,1
+ 1758 19F4              brne L394
+ 175A           X212:
+ 175A           ; 		_LEDSTATE = 0;
+ 175A 2224              clr R2
+ 175C 20920000          sts __LEDSTATE,R2
+ 1760           L394:
+ 1760           L393:
+ 1760                   .dbline 0 ; func end
+ 1760 0895              ret
+                        .even
+ 1762           _SetStateLedFree::
+ 1762           ; }
+ 1762           ; void SetStateLedFree(void)
+ 1762           ; {
+ 1762           ; 	DDRE |= 0x30;
+ 1762 8DB1              in R24,0xd
+ 1764 8063              ori R24,48
+ 1766 8DB9              out 0xd,R24
+ 1768           ;       PORTE |= 0x20;
+ 1768 759A              sbi 0xe,5
+ 176A           ;       PORTE &= 0xef;
+ 176A 8EB1              in R24,0xe
+ 176C 8F7E              andi R24,239
+ 176E 8EB9              out 0xe,R24
+ 1770           ;       if(_SampSW == 1)                // 未锁定按键,LED变绿
+ 1770 80910000          lds R24,__SampSW
+ 1774 8130              cpi R24,1
+ 1776 19F4              brne L397
+ 1778           X213:
+ 1778           ; 		_LEDSTATE = 1;
+ 1778 81E0              ldi R24,1
+ 177A 80930000          sts __LEDSTATE,R24
+ 177E           L397:
+ 177E           L396:
+ 177E                   .dbline 0 ; func end
+ 177E 0895              ret
+                        .area bss(ram, con, rel)
+ 000F           _BeepCnt:
+ 000F                   .blkb 2
+ 0011           _uart1ReceiveOutTime::
+ 0011                   .blkb 2
+ 0013           _time::
+ 0013                   .blkb 2
+ 0015           __RingPieceState::
+ 0015                   .blkb 30
+ 0033           _StoreTemp::
+ 0033                   .blkb 1
+ 0034           _StoreHumi::
+ 0034                   .blkb 1
+ 0035           _LiquidState::
+ 0035                   .blkb 8
+ 003D           _MotModulePhoSta::
+ 003D                   .blkb 30
+ 005B           _MotorPosition::
+ 005B                   .blkb 45
+ 0088           _EvenCardStoreProcess::
+ 0088                   .blkb 2
+ 008A           _EvenLiquidProcess::
+ 008A                   .blkb 2
+ 008C           _EvenPosChangeProcess::
+ 008C                   .blkb 2
+                        .area data(ram, con, rel)
+ 000B           L291:
+ 000B                   .blkb 11
+                        .area idata
+ 000B 25732024202020310D0A00    .byte 37,'s,32,36,32,32,32,49,13,10,0
+                        .area data(ram, con, rel)
+ 0016           L257:
+ 0016                   .blkb 5
+                        .area idata
+ 0016 25730D0A00        .byte 37,'s,13,10,0
+                        .area data(ram, con, rel)
+ 001B           L200:
+ 001B                   .blkb 10
+                        .area idata
+ 001B 257320242534640D0A00      .byte 37,'s,32,36,37,52,'d,13,10,0
+                        .area data(ram, con, rel)
+ 0025           L198:
+ 0025                   .blkb 15
+                        .area idata
+ 0025 2573202425346420242534640D0A00    .byte 37,'s,32,36,37,52,'d,32,36,37,52,'d,13,10,0
+                        .area data(ram, con, rel)
+ 0034           L158:
+ 0034                   .blkb 3
+                        .area idata
+ 0034 0D0A00            .byte 13,10,0
+                        .area data(ram, con, rel)
+ 0037           L154:
+ 0037                   .blkb 6
+                        .area idata
+ 0037 202425346400      .byte 32,36,37,52,'d,0
+                        .area data(ram, con, rel)
+ 003D           L134:
+ 003D                   .blkb 6
+                        .area idata
+ 003D 202425326400      .byte 32,36,37,50,'d,0
+                        .area data(ram, con, rel)
+ 0043           L121:
+ 0043                   .blkb 5
+                        .area idata
+ 0043 2024256300        .byte 32,36,37,'c,0
+                        .area data(ram, con, rel)
+ 0048           L105:
+ 0048                   .blkb 12
+                        .area idata
+ 0048 2425326420242532640D0A00  .byte 36,37,50,'d,32,36,37,50,'d,13,10,0
+                        .area data(ram, con, rel)
+ 0054           L104:
+ 0054                   .blkb 15
+                        .area idata
+ 0054 3A53544F52455F4D4F4E49544F5200    .byte 58,'S,'T,'O,'R,'E,95,'M,'O,'N,'I,'T,'O,'R,0
+                        .area data(ram, con, rel)
+ 0063           L102:
+ 0063                   .blkb 16
+                        .area idata
+ 0063 3A4C49515549445F434F4E54524F4C00  .byte 58,'L,'I,'Q,'U,'I,'D,95,'C,'O,'N,'T,'R,'O,'L,0
+                        .area data(ram, con, rel)
+ 0073           L100:
+ 0073                   .blkb 15
+                        .area idata
+ 0073 3A4D4F545F53414D505F50554D5000    .byte 58,'M,'O,'T,95,'S,'A,'M,'P,95,'P,'U,'M,'P,0
+                        .area data(ram, con, rel)
+ 0082           L98:
+ 0082                   .blkb 14
+                        .area idata
+ 0082 3A4D4F545F4546464C55454E5400      .byte 58,'M,'O,'T,95,'E,'F,'F,'L,'U,'E,'N,'T,0
+                        .area data(ram, con, rel)
+ 0090           L96:
+ 0090                   .blkb 11
+                        .area idata
+ 0090 3A4D4F545F464C55494400    .byte 58,'M,'O,'T,95,'F,'L,'U,'I,'D,0
+                        .area data(ram, con, rel)
+ 009B           L94:
+ 009B                   .blkb 13
+                        .area idata
+ 009B 3A4D4F545F44494C55454E5400        .byte 58,'M,'O,'T,95,'D,'I,'L,'U,'E,'N,'T,0
+                        .area data(ram, con, rel)
+ 00A8           L92:
+ 00A8                   .blkb 21
+                        .area idata
+ 00A8 3A4D4F545F53544F52455F434152445F  .byte 58,'M,'O,'T,95,'S,'T,'O,'R,'E,95,'C,'A,'R,'D,95
+ 00B8 4D4F564500        .byte 'M,'O,'V,'E,0
+                        .area data(ram, con, rel)
+ 00BD           L90:
+ 00BD                   .blkb 17
+                        .area idata
+ 00BD 3A4D4F545F434152445F554E4C4F4144  .byte 58,'M,'O,'T,95,'C,'A,'R,'D,95,'U,'N,'L,'O,'A,'D
+ 00CD 00                .byte 0
+                        .area data(ram, con, rel)
+ 00CE           L88:
+ 00CE                   .blkb 15
+                        .area idata
+ 00CE 3A4D4F545F434152445F4C4F414400    .byte 58,'M,'O,'T,95,'C,'A,'R,'D,95,'L,'O,'A,'D,0
+                        .area data(ram, con, rel)
+ 00DD           L86:
+ 00DD                   .blkb 17
+                        .area idata
+ 00DD 3A4D4F545F53414D505F4E4545444C45  .byte 58,'M,'O,'T,95,'S,'A,'M,'P,95,'N,'E,'E,'D,'L,'E
+ 00ED 00                .byte 0
+                        .area data(ram, con, rel)
+ 00EE           L84:
+ 00EE                   .blkb 15
+                        .area idata
+ 00EE 3A4D4F545F53414D505F5452554E00    .byte 58,'M,'O,'T,95,'S,'A,'M,'P,95,'T,'R,'U,'N,0
+                        .area data(ram, con, rel)
+ 00FD           L82:
+ 00FD                   .blkb 16
+                        .area idata
+ 00FD 3A4D4F545F5455524E5F504C41544500  .byte 58,'M,'O,'T,95,'T,'U,'R,'N,95,'P,'L,'A,'T,'E,0
+                        .area data(ram, con, rel)
+ 010D           L77:
+ 010D                   .blkb 3
+                        .area idata
+ 010D 257300            .byte 37,'s,0
+                        .area data(ram, con, rel)
+ 0110           L51:
+ 0110                   .blkb 20
+                        .area idata
+ 0110 25732024253264202425326420242534  .byte 37,'s,32,36,37,50,'d,32,36,37,50,'d,32,36,37,52
+ 0120 640D0A00          .byte 'd,13,10,0
+                        .area data(ram, con, rel)
+ 0124           L41:
+ 0124                   .blkb 19
+                        .area idata
+ 0124 25732024253264202425326420242563  .byte 37,'s,32,36,37,50,'d,32,36,37,50,'d,32,36,37,'c
+ 0134 0D0A00            .byte 13,10,0
+                        .area data(ram, con, rel)
+                ; }
+                ; /****************************************************************************************************/
+                ; 
+                ; 
+                ; /********************************************* File end **********************************************/

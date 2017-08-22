@@ -5,10 +5,6 @@
 #include "Common.h"
 
 
-extern  unsigned char _SampSW;         
-unsigned char _LEDSTATE = 0;   //0表示测试过程是红灯，1表示测试过程是绿灯
-
-
 typedef struct _MOTOR_POSITION{
 	unsigned char defPosNum;	// 预定义位置
 	int stepPos;		// 步进数位置
@@ -43,9 +39,6 @@ void InitControlLayerData(void){
 	EvenLiquidProcess = 0;
 	EvenCardStoreProcess = 0;
 }
-
-unsigned int time;
-unsigned int uart1ReceiveOutTime;
 
 
 unsigned char GetRingPieceState(unsigned char n){
@@ -103,12 +96,10 @@ void CleanLiquidEvenProcess(void){
 	EvenLiquidProcess = 0;
 }
 // 注册片仓事件处理函数
-unsigned char RegisterCardStoreEvenProcess(void * proc)
-{
+unsigned char RegisterCardStoreEvenProcess(void * proc){
 	EvenCardStoreProcess = proc;
 }
-void CleanPosCardStoreProcess(void)
-{
+void CleanPosCardStoreProcess(void){
 	EvenCardStoreProcess = 0;
 }
 
@@ -212,45 +203,6 @@ void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
 			break;
 		}
 }
-/*
-unsigned char GetTurnPlateMonitorState(void)
-{	
-	Uart0ReUnable;
-	uart_Printf("%s $%4d\r\n",strM3175,MotModulePhoSta[MOT_TURN_PLATE][1]);
-	Uart0ReEnable;
-	return MotModulePhoSta[MOT_TURN_PLATE][1];
-}
-*/
-
-signed char GetMotorMonitorState(unsigned char slave,unsigned char num)
-{
-	if(slave == 0 || slave == 6 || slave == 7)	
-		return -1;
-	if(num > 1)
-		num = 1;
-	Uart0ReUnable;
-	uart_Printf("%s",strM3175);
-	switch(slave)
-	{
-		case 1:uart_Printf(":MOT_TURN_PLATE");break;
-		case 2:uart_Printf(":MOT_SAMP_TRUN");break;
-		case 3:uart_Printf(":MOT_SAMP_NEEDLE");break;
-		case 4:uart_Printf(":MOT_CARD_LOAD");break;
-		case 5:uart_Printf(":MOT_CARD_UNLOAD");break;
-		case 8:uart_Printf(":MOT_STORE_CARD_MOVE");break;
-		case 9:uart_Printf(":MOT_DILUENT");break;
-		case 10:uart_Printf(":MOT_FLUID");break;
-		case 11:uart_Printf(":MOT_EFFLUENT");break;
-		case 12:uart_Printf(":MOT_SAMP_PUMP");break;
-		case 13:uart_Printf(":LIQUID_CONTROL");break;
-		case 14:uart_Printf(":STORE_MONITOR");break;
-		default:break;
-	}
-	uart_Printf("$%2d $%2d\r\n",num,MotModulePhoSta[slave][num]);
-	//uart_Printf("%s:%s.%s $%2d\r\n",strM3175,SlaveID[slave],Monitor[num],MotModulePhoSta[MOT_TURN_PLATE][num]);
-	Uart0ReEnable;
-	return MotModulePhoSta[slave][num];
-}
 
 // 上传所有传感器信息
 void UpLoadingAllSensorState(void){
@@ -260,8 +212,7 @@ void UpLoadingAllSensorState(void){
 	uart_Printf("%s",strM4202);	// 发送开始
 	Uart0ReEnable;
 	// 发送电机模块光藕信息
-	for(i=1; i<=12; i++)
-	{
+	for(i=1; i<=12; i++){
 		if(i==6 || i==7)
 			continue;
 		for(n=0; n<2; n++)
@@ -741,8 +692,7 @@ unsigned char MachinePositionInit(void){
 	if(waitMotTurnPlate){	if(GetMotState(MOT_TURN_PLATE)!=STA_SLAVE_FREE)		return 0;	waitMotTurnPlate = 0;	}
 	if(waitMotCardTrolley){	if(GetMotState(MOT_STORE_CARD_MOVE)!=STA_SLAVE_FREE)	return 0;	waitMotCardTrolley = 0;	}
 	
-	switch(mainStep)
-	{
+	switch(mainStep){
 		case 0:		// 设置运行参数
 			SetMotRunPam(MOT_SAMP_NEEDLE,240,10,CURRENT_SAMP_NEEDLE);
 			SetMotRunPam(MOT_CARD_LOAD,160,20,CURRENT_CARD_LOAD);
@@ -1143,21 +1093,15 @@ void Beep(void){
 }
 
 // 设置状态指示灯
-void SetStateLedBusy(void)
-{
+void SetStateLedBusy(void){
 	DDRE |= 0x30;
 	PORTE |= 0x10;
 	PORTE &= 0xdf;
-	if(_SampSW == 1)		// 未锁定按键,LED变红
-		_LEDSTATE = 0;
 }
-void SetStateLedFree(void)
-{
+void SetStateLedFree(void){
 	DDRE |= 0x30;
 	PORTE |= 0x20;
 	PORTE &= 0xef;
-	if(_SampSW == 1)		// 未锁定按键,LED变绿
-		_LEDSTATE = 1;
 }
 /****************************************************************************************************/
 

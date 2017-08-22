@@ -44,9 +44,6 @@ void InitControlLayerData(void){
 	EvenCardStoreProcess = 0;
 }
 
-unsigned int time;
-unsigned int uart1ReceiveOutTime;
-
 
 unsigned char GetRingPieceState(unsigned char n){
 	if(n>=RING_QUEUE_NUM)
@@ -103,12 +100,10 @@ void CleanLiquidEvenProcess(void){
 	EvenLiquidProcess = 0;
 }
 // 注册片仓事件处理函数
-unsigned char RegisterCardStoreEvenProcess(void * proc)
-{
+unsigned char RegisterCardStoreEvenProcess(void * proc){
 	EvenCardStoreProcess = proc;
 }
-void CleanPosCardStoreProcess(void)
-{
+void CleanPosCardStoreProcess(void){
 	EvenCardStoreProcess = 0;
 }
 
@@ -212,7 +207,7 @@ void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
 			break;
 		}
 }
-/*
+
 unsigned char GetTurnPlateMonitorState(void)
 {	
 	Uart0ReUnable;
@@ -220,36 +215,32 @@ unsigned char GetTurnPlateMonitorState(void)
 	Uart0ReEnable;
 	return MotModulePhoSta[MOT_TURN_PLATE][1];
 }
-*/
 
-signed char GetMotorMonitorState(unsigned char slave,unsigned char num)
+unsigned char SlaveID[15][] = 
 {
-	if(slave == 0 || slave == 6 || slave == 7)	
-		return -1;
-	if(num > 1)
-		num = 1;
+	"",							// 0
+	"MOT_TURN_PLATE",			// 1
+	"MOT_SAMP_TRUN",			// 2
+	"MOT_SAMP_NEEDLE",			// 3
+	"MOT_CARD_LOAD",			// 4
+	"MOT_CARD_UNLOAD",			// 5
+	"",							// 6
+	"",							// 7
+	"MOT_STORE_CARD_MOVE",		// 8
+ 	"MOT_DILUENT",				// 9
+ 	"MOT_FLUID",				// 10
+ 	"MOT_EFFLUENT",				// 11
+ 	"MOT_SAMP_PUMP",			// 12
+ 	"LIQUID_CONTROL",			// 13		
+ 	"STORE_MONITOR"				// 14	
+};
+
+unsigned char GetMotorMonitorState(unsigned char slave,unsigned char num)
+{
 	Uart0ReUnable;
-	uart_Printf("%s",strM3175);
-	switch(slave)
-	{
-		case 1:uart_Printf(":MOT_TURN_PLATE");break;
-		case 2:uart_Printf(":MOT_SAMP_TRUN");break;
-		case 3:uart_Printf(":MOT_SAMP_NEEDLE");break;
-		case 4:uart_Printf(":MOT_CARD_LOAD");break;
-		case 5:uart_Printf(":MOT_CARD_UNLOAD");break;
-		case 8:uart_Printf(":MOT_STORE_CARD_MOVE");break;
-		case 9:uart_Printf(":MOT_DILUENT");break;
-		case 10:uart_Printf(":MOT_FLUID");break;
-		case 11:uart_Printf(":MOT_EFFLUENT");break;
-		case 12:uart_Printf(":MOT_SAMP_PUMP");break;
-		case 13:uart_Printf(":LIQUID_CONTROL");break;
-		case 14:uart_Printf(":STORE_MONITOR");break;
-		default:break;
-	}
-	uart_Printf("$%2d $%2d\r\n",num,MotModulePhoSta[slave][num]);
-	//uart_Printf("%s:%s.%s $%2d\r\n",strM3175,SlaveID[slave],Monitor[num],MotModulePhoSta[MOT_TURN_PLATE][num]);
+	uart_Printf("%s $%4d\r\n",strM3175,MotModulePhoSta[MOT_TURN_PLATE][1]);
 	Uart0ReEnable;
-	return MotModulePhoSta[slave][num];
+
 }
 
 // 上传所有传感器信息

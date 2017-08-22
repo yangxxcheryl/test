@@ -1,0 +1,712 @@
+                        .module IIC.c
+                        .area data(ram, con, rel)
+ 0000           _ORGDATA::
+ 0000                   .blkb 2
+                        .area idata
+ 0000 AAA5              .byte 170,165
+                        .area data(ram, con, rel)
+ 0002                   .blkb 2
+                        .area idata
+ 0002 555A              .byte 'U,'Z
+                        .area data(ram, con, rel)
+ 0004                   .blkb 2
+                        .area idata
+ 0004 0102              .byte 1,2
+                        .area data(ram, con, rel)
+ 0006                   .blkb 2
+                        .area idata
+ 0006 0304              .byte 3,4
+                        .area data(ram, con, rel)
+                        .area text(rom, con, rel)
+                ;              i -> <dead>
+                ;            len -> R10,R11
+                ;            ptr -> R12,R13
+                ;           addr -> R18,R19
+                ;            sla -> R16
+                        .even
+ 0000           _TWI_RW::
+ 0000 0E940000          xcall push_xgset003C
+ 0004 CC80              ldd R12,y+4
+ 0006 DD80              ldd R13,y+5
+ 0008 AE80              ldd R10,y+6
+ 000A BF80              ldd R11,y+7
+ 000C           ; 
+ 000C           ; 
+ 000C           ; #include <iom1280v.h>
+ 000C           ; #include "B1404_LIB.h"
+ 000C           ; #include "LibCommon.h"
+ 000C           ; 
+ 000C           ; 
+ 000C           ; 
+ 000C           ; /* Master */
+ 000C           ; #define TW_START                      0x08    //START已发送
+ 000C           ; #define TW_REP_START          0x10//重复START已发送
+ 000C           ; /* Master Transmitter */
+ 000C           ; #define TW_MT_SLA_ACK         0x18//SLA+W 已发送收到ACK  
+ 000C           ; #define TW_MT_SLA_NACK                0x20//SLA+W 已发送接收到NOT ACK 
+ 000C           ; #define TW_MT_DATA_ACK                0x28//数据已发送接收到ACK  
+ 000C           ; #define TW_MT_DATA_NACK               0x30//数据已发送接收到NOT ACK 
+ 000C           ; #define TW_MT_ARB_LOST                0x38//SLA+W 或数据的仲裁失败从发送状态码
+ 000C           ; /* Master Receiver */
+ 000C           ; #define TW_MR_ARB_LOST                0x38    //
+ 000C           ; #define TW_MR_SLA_ACK         0x40
+ 000C           ; #define TW_MR_SLA_NACK                0x48    //
+ 000C           ; #define TW_MR_DATA_ACK                0x50    //
+ 000C           ; #define TW_MR_DATA_NACK               0x58    //
+ 000C           ; /* Slave Receiver */
+ 000C           ; #define TW_SR_SLA_ACK                         0x60    //
+ 000C           ; #define TW_SR_ARB_LOST_SLA_ACK                0x68    //
+ 000C           ; #define TW_SR_GCALL_ACK                               0x70    //
+ 000C           ; #define TW_SR_ARB_LOST_GCALL_ACK      0x78    //
+ 000C           ; #define TW_SR_DATA_ACK                                0x80    //
+ 000C           ; #define TW_SR_DATA_NACK                               0x88    //
+ 000C           ; #define TW_SR_GCALL_DATA_ACK          0x90    //
+ 000C           ; #define TW_SR_GCALL_DATA_NACK         0x98    //
+ 000C           ; #define TW_SR_STOP                                    0xA0    //
+ 000C           ; /* Slave Transmitter */
+ 000C           ; #define TW_ST_SLA_ACK                 0xA8    //自己的SLA+R 已经被接收ACK 已返回
+ 000C           ; #define TW_ST_ARB_LOST_SLA_ACK        0xB0    //SLA+R/W 作为主机的仲裁失败；自己的SLA+R 已经被接收ACK 已返回
+ 000C           ; #define TW_ST_DATA_ACK                        0xB8    //TWDR 里数据已经发送接收到ACK  
+ 000C           ; #define TW_ST_DATA_NACK                       0xC0    //TWDR 里数据已经发送接收到NOT ACK  
+ 000C           ; #define TW_ST_LAST_DATA                       0xC8    //TWDR 的一字节数据已经发送(TWAE = “0”);接收到ACK 
+ 000C           ; 
+ 000C           ; //管脚定义 
+ 000C           ; #define  pinSCL    0     //PC0 SCL 
+ 000C           ; #define  pinSDA    1     //PC1 SDA  
+ 000C           ; #define F_CPU 14745600
+ 000C           ; #define fSCL    100000                         
+ 000C           ; #if F_CPU < fSCL*36   
+ 000C           ;       #define TWBR_SET    10;         
+ 000C           ; #else   
+ 000C           ;       #define TWBR_SET    (F_CPU/fSCL-16)/2;                  //计算TWBR值 
+ 000C           ; #endif 
+ 000C           ; #define TW_ACT    (1<<TWINT)|(1<<TWEN)|(1<<TWIE)      
+ 000C           ; 
+ 000C           ; #define SLA_24CXX     0xA0            
+ 000C           ; #define ADDR_24C256           0x00 
+ 000C           ; //TWI_操作状态 
+ 000C           ; #define TW_BUSY               0 
+ 000C           ; #define TW_OK         1 
+ 000C           ; #define TW_FAIL               2 
+ 000C           ; //TWI_读写命令状态 
+ 000C           ; #define OP_BUSY               0 
+ 000C           ; #define OP_RUN                1  
+ 000C           ; 
+ 000C           ; //TWI读写操作公共步骤 
+ 000C           ; #define ST_FAIL               0               // 出错状态 
+ 000C           ; #define ST_START      1               // START状态检查 
+ 000C           ; #define ST_SLAW               2               // SLAW状态检查 
+ 000C           ; #define ST_WADDR_H    3               // 
+ 000C           ; #define ST_WADDR_L    4               // ADDR状态检查 
+ 000C           ; //TWI读操作步骤 
+ 000C           ; #define ST_RESTART  5                 // RESTART状态检查 
+ 000C           ; #define ST_SLAR               6               // SLAR状态检查 
+ 000C           ; #define ST_RDATA      7               // 读取数据状态检查，循环n字节 
+ 000C           ; //TWI写操作步骤 
+ 000C           ; #define ST_WDATA      8               // 写数据状态检查，循环n字节 
+ 000C           ; #define FAIL_MAX      20              // 重试次数最大值  
+ 000C           ; 
+ 000C           ; #define TW_READ               1
+ 000C           ; #define TW_WRITE      0
+ 000C           ; 
+ 000C           ; //定义全局变量 
+ 000C           ; unsigned char ORGDATA[8]={0xAA,0xA5,0x55,0x5A,0x01,0x02,0x03,0x04}; //原始数据 
+ 000C           ; unsigned char CMPDATA[8];             //比较数据 
+ 000C           ; unsigned char BUFFER[256];      //缓冲区，可以装载整个AC24C02的数据 
+ 000C           ; struct str_TWI{         //TWI数据结构 
+ 000C           ;       volatile unsigned char STATUS;  //TWI_操作状态     
+ 000C           ;       unsigned char SLA;                      //从设备的器件地址     
+ 000C           ;       unsigned int ADDR;                              //从设备的数据地址     
+ 000C           ;       unsigned char *pBUF;                    //数据缓冲区指针     
+ 000C           ;       unsigned int DATALEN;                   //数据长度     
+ 000C           ;       unsigned char STATE;                    //TWI读写操作步骤     
+ 000C           ;       unsigned char FAILCNT;                  //失败重试次数 
+ 000C           ; }; 
+ 000C           ; struct str_TWI strTWI;       //TWI的数据结构变量 
+ 000C           ; 
+ 000C           ; unsigned char TWI_RW(unsigned char sla,unsigned int addr,unsigned char *ptr,unsigned int len) {
+ 000C           ;       unsigned char i;     
+ 000C           ;       if (strTWI.STATUS==TW_BUSY){//TWI忙，不能进行操作         
+ 000C 20900000          lds R2,_strTWI
+ 0010 2220              tst R2
+ 0012 11F4              brne L3
+ 0014           X0:
+ 0014           ; 		return OP_BUSY;     
+ 0014 0027              clr R16
+ 0016 1AC0              xjmp L2
+ 0018           L3:
+ 0018           ; 		}     
+ 0018           ; 	strTWI.STATUS=TW_BUSY;     
+ 0018 2224              clr R2
+ 001A 20920000          sts _strTWI,R2
+ 001E           ; //    i=(addr>>8)<<1;     
+ 001E           ; //    i&=0x06;         //考虑了24C04/08的EEPROM地址高位放在SLA里面     
+ 001E           ; //    strTWI.SLA=sla+i;    
+ 001E           ;       strTWI.SLA=sla; 
+ 001E 00930100          sts _strTWI+1,R16
+ 0022           ;       strTWI.ADDR=addr;     
+ 0022 30930300          sts _strTWI+2+1,R19
+ 0026 20930200          sts _strTWI+2,R18
+ 002A           ;       strTWI.pBUF=ptr;     
+ 002A D0920500          sts _strTWI+4+1,R13
+ 002E C0920400          sts _strTWI+4,R12
+ 0032           ;       strTWI.DATALEN=len;     
+ 0032 B0920700          sts _strTWI+6+1,R11
+ 0036 A0920600          sts _strTWI+6,R10
+ 003A           ;       strTWI.STATE=ST_START; 
+ 003A 81E0              ldi R24,1
+ 003C 80930800          sts _strTWI+8,R24
+ 0040           ;       strTWI.FAILCNT=0;     
+ 0040 20920900          sts _strTWI+9,R2
+ 0044           ;       TWCR=(1<<TWSTA)|TW_ACT; 
+ 0044 85EA              ldi R24,165
+ 0046 8093BC00          sts 188,R24
+ 004A           ;       return OP_RUN; 
+ 004A 01E0              ldi R16,1
+ 004C           L2:
+ 004C                   .dbline 0 ; func end
+ 004C 0C940000          xjmp pop_xgset003C
+                        .area vector(rom, abs)
+                        .org 156
+ 009C 0C942800          jmp _twi_isr
+                        .area text(rom, con, rel)
+                ;         action -> R20
+                ;         status -> R18
+                ;          state -> R16
+                        .even
+ 0050           _twi_isr::
+ 0050 2A92              st -y,R2
+ 0052 3A92              st -y,R3
+ 0054 0A93              st -y,R16
+ 0056 2A93              st -y,R18
+ 0058 8A93              st -y,R24
+ 005A 9A93              st -y,R25
+ 005C AA93              st -y,R26
+ 005E EA93              st -y,R30
+ 0060 FA93              st -y,R31
+ 0062 2FB6              IN R2,63
+ 0064 2A92              st -y,R2
+ 0066 0E940000          xcall push_xgsetF000
+ 006A           ; }  
+ 006A           ; 
+ 006A           ; #pragma interrupt_handler twi_isr:iv_TWI
+ 006A           ; void twi_isr(void) {
+ 006A           ;       //IIC中断     
+ 006A           ;       unsigned char action,state,status;     
+ 006A           ;       action = strTWI.SLA & TW_READ;    
+ 006A 40910100          lds R20,_strTWI+1
+ 006E 4170              andi R20,1
+ 0070           ;       state = strTWI.STATE;     
+ 0070 00910800          lds R16,_strTWI+8
+ 0074           ;       status = TWSR & 0xF8;  
+ 0074 2091B900          lds R18,185
+ 0078 287F              andi R18,248
+ 007A           ;       if ((status>=0x60)||(status==0x00)){  
+ 007A 2036              cpi R18,96
+ 007C 10F4              brsh L16
+ 007E           X1:
+ 007E 2223              tst R18
+ 0080 09F4              brne L14
+ 0082           X2:
+ 0082           L16:
+ 0082           ; 		return;     
+ 0082 1DC1              xjmp L11
+ 0084           L14:
+ 0084           ; 		}     
+ 0084           ; 	switch(state){     
+ 0084 602F              mov R22,R16
+ 0086 7727              clr R23
+ 0088 6130              cpi R22,1
+ 008A E0E0              ldi R30,0
+ 008C 7E07              cpc R23,R30
+ 008E 19F1              breq L20
+ 0090           X3:
+ 0090 6230              cpi R22,2
+ 0092 E0E0              ldi R30,0
+ 0094 7E07              cpc R23,R30
+ 0096 61F1              breq L24
+ 0098           X4:
+ 0098 6330              cpi R22,3
+ 009A E0E0              ldi R30,0
+ 009C 7E07              cpc R23,R30
+ 009E 09F4              brne X26
+ 00A0 39C0              xjmp L28
+ 00A2           X26:
+ 00A2           X5:
+ 00A2 6430              cpi R22,4
+ 00A4 E0E0              ldi R30,0
+ 00A6 7E07              cpc R23,R30
+ 00A8 09F4              brne X27
+ 00AA 43C0              xjmp L32
+ 00AC           X27:
+ 00AC           X6:
+ 00AC 6530              cpi R22,5
+ 00AE E0E0              ldi R30,0
+ 00B0 7E07              cpc R23,R30
+ 00B2 09F4              brne X28
+ 00B4 61C0              xjmp L39
+ 00B6           X28:
+ 00B6           X7:
+ 00B6 6630              cpi R22,6
+ 00B8 E0E0              ldi R30,0
+ 00BA 7E07              cpc R23,R30
+ 00BC 09F4              brne X29
+ 00BE 68C0              xjmp L43
+ 00C0           X29:
+ 00C0           X8:
+ 00C0 6730              cpi R22,7
+ 00C2 E0E0              ldi R30,0
+ 00C4 7E07              cpc R23,R30
+ 00C6 09F4              brne X30
+ 00C8 7DC0              xjmp L49
+ 00CA           X30:
+ 00CA           X9:
+ 00CA 6830              cpi R22,8
+ 00CC E0E0              ldi R30,0
+ 00CE 7E07              cpc R23,R30
+ 00D0 09F4              brne X31
+ 00D2 B2C0              xjmp L59
+ 00D4           X31:
+ 00D4           X10:
+ 00D4 DDC0              xjmp L17
+ 00D6           L20:
+ 00D6           ; 		case ST_START:						//START状态检查         
+ 00D6           ; 			if(status==TW_START) {			
+ 00D6 2830              cpi R18,8
+ 00D8 49F4              brne L21
+ 00DA           X11:
+ 00DA           ; 				TWDR = strTWI.SLA & 0xFE;	         
+ 00DA 80910100          lds R24,_strTWI+1
+ 00DE 8E7F              andi R24,254
+ 00E0 8093BB00          sts 187,R24
+ 00E4           ;                               TWCR = TW_ACT;                                
+ 00E4 85E8              ldi R24,133
+ 00E6 8093BC00          sts 188,R24
+ 00EA           ;                               }         
+ 00EA D3C0              xjmp L18
+ 00EC           L21:
+ 00EC           ; 			else{	//发送start信号出错            
+ 00EC           ; 				state=ST_FAIL;         
+ 00EC 0027              clr R16
+ 00EE           ;                               }
+ 00EE           ;                       break;
+ 00EE D1C0              xjmp L18
+ 00F0           L24:
+ 00F0           ; 		case ST_SLAW: //SLAW状态检查
+ 00F0           ; 			if(status==TW_MT_SLA_ACK){		//发送器件地址成功 
+ 00F0 2831              cpi R18,24
+ 00F2 71F4              brne L25
+ 00F4           X12:
+ 00F4           ; 				TWDR = (strTWI.ADDR&0xff00)>>8;    
+ 00F4 80910200          lds R24,_strTWI+2
+ 00F8 90910300          lds R25,_strTWI+2+1
+ 00FC 8070              andi R24,0
+ 00FE 1C01              movw R2,R24
+ 0100 232C              mov R2,R3
+ 0102 3324              clr R3
+ 0104 2092BB00          sts 187,R2
+ 0108           ;                               TWCR = TW_ACT;                  
+ 0108 85E8              ldi R24,133
+ 010A 8093BC00          sts 188,R24
+ 010E           ;                               }         
+ 010E C1C0              xjmp L18
+ 0110           L25:
+ 0110           ; 			else{		//发送器件地址出错             
+ 0110           ; 				state=ST_FAIL;         
+ 0110 0027              clr R16
+ 0112           ;                               }         
+ 0112           ;                       break;  
+ 0112 BFC0              xjmp L18
+ 0114           L28:
+ 0114           ; 		case ST_WADDR_H:	// 高字节地址已写入，开始写低字节地址
+ 0114           ; 			if(status==TW_MT_DATA_ACK){		
+ 0114 2832              cpi R18,40
+ 0116 59F4              brne L29
+ 0118           X13:
+ 0118           ; 				TWDR = strTWI.ADDR&0x00ff; 
+ 0118 80910200          lds R24,_strTWI+2
+ 011C 90910300          lds R25,_strTWI+2+1
+ 0120 9070              andi R25,0
+ 0122 8093BB00          sts 187,R24
+ 0126           ;                               TWCR = TW_ACT;                   
+ 0126 85E8              ldi R24,133
+ 0128 8093BC00          sts 188,R24
+ 012C           ;                               }         
+ 012C B2C0              xjmp L18
+ 012E           L29:
+ 012E           ; 			else{		//发送器件地址出错             
+ 012E           ; 				state=ST_FAIL;         
+ 012E 0027              clr R16
+ 0130           ;                               }         
+ 0130           ;                       break;
+ 0130 B0C0              xjmp L18
+ 0132           L32:
+ 0132           ; 		case ST_WADDR_L:	// 低字节地址已写入
+ 0132           ; 			if(status==TW_MT_DATA_ACK){			//发送eeprom地址成功 
+ 0132 2832              cpi R18,40
+ 0134 F9F4              brne L33
+ 0136           X14:
+ 0136           ; 				if (action==TW_READ){			
+ 0136 4130              cpi R20,1
+ 0138 21F4              brne L35
+ 013A           X15:
+ 013A           ; 					TWCR=(1<<TWSTA)|TW_ACT;		
+ 013A 85EA              ldi R24,165
+ 013C 8093BC00          sts 188,R24
+ 0140           ;                                       }             
+ 0140 A8C0              xjmp L18
+ 0142           L35:
+ 0142           ; 				else{							
+ 0142           ; 					TWDR=*strTWI.pBUF++;		
+ 0142 E0910400          lds R30,_strTWI+4
+ 0146 F0910500          lds R31,_strTWI+4+1
+ 014A 2190              ld R2,Z+
+ 014C F0930500          sts _strTWI+4+1,R31
+ 0150 E0930400          sts _strTWI+4,R30
+ 0154 2092BB00          sts 187,R2
+ 0158           ;                                       strTWI.DATALEN--;
+ 0158 80910600          lds R24,_strTWI+6
+ 015C 90910700          lds R25,_strTWI+6+1
+ 0160 0197              sbiw R24,1
+ 0162 90930700          sts _strTWI+6+1,R25
+ 0166 80930600          sts _strTWI+6,R24
+ 016A           ;                                       state=ST_WDATA-1;                       
+ 016A 07E0              ldi R16,7
+ 016C           ;                                       TWCR=TW_ACT;                            
+ 016C 85E8              ldi R24,133
+ 016E 8093BC00          sts 188,R24
+ 0172           ;                                       }
+ 0172           ;                               }
+ 0172 8FC0              xjmp L18
+ 0174           L33:
+ 0174           ; 			else{								//发送eeprom地址出错
+ 0174           ; 				state=ST_FAIL;
+ 0174 0027              clr R16
+ 0176           ;                               }
+ 0176           ;                       break;
+ 0176 8DC0              xjmp L18
+ 0178           L39:
+ 0178           ; 		case ST_RESTART:					//RESTART状态检查，只有读操作模式才能跳到这里
+ 0178           ; 			if(status==TW_REP_START){		
+ 0178 2031              cpi R18,16
+ 017A 41F4              brne L40
+ 017C           X16:
+ 017C           ; 				TWDR=strTWI.SLA;			
+ 017C 20900100          lds R2,_strTWI+1
+ 0180 2092BB00          sts 187,R2
+ 0184           ;                               TWCR=TW_ACT;                            
+ 0184 85E8              ldi R24,133
+ 0186 8093BC00          sts 188,R24
+ 018A           ;                               }
+ 018A 83C0              xjmp L18
+ 018C           L40:
+ 018C           ; 			else{							
+ 018C           ; 				state=ST_FAIL;
+ 018C 0027              clr R16
+ 018E           ;                               }
+ 018E           ;                       break;
+ 018E 81C0              xjmp L18
+ 0190           L43:
+ 0190           ; 		case ST_SLAR:						//SLAR状态检查，只有读操作模式才能跳到这里 
+ 0190           ; 			if(status==TW_MR_SLA_ACK){		
+ 0190 2034              cpi R18,64
+ 0192 B1F4              brne L44
+ 0194           X17:
+ 0194           ; 				if (strTWI.DATALEN--){		
+ 0194 20900600          lds R2,_strTWI+6
+ 0198 30900700          lds R3,_strTWI+6+1
+ 019C C101              movw R24,R2
+ 019E 0197              sbiw R24,1
+ 01A0 90930700          sts _strTWI+6+1,R25
+ 01A4 80930600          sts _strTWI+6,R24
+ 01A8 2220              tst R2
+ 01AA 11F4              brne X18
+ 01AC 3320              tst R3
+ 01AE 21F0              breq L46
+ 01B0           X18:
+ 01B0           ; 					TWCR=(1<<TWEA)|TW_ACT;	
+ 01B0 85EC              ldi R24,197
+ 01B2 8093BC00          sts 188,R24
+ 01B6           ;                                       }
+ 01B6 6DC0              xjmp L18
+ 01B8           L46:
+ 01B8           ; 				else{						
+ 01B8           ; 					TWCR=TW_ACT;			
+ 01B8 85E8              ldi R24,133
+ 01BA 8093BC00          sts 188,R24
+ 01BE           ;                                       }
+ 01BE           ;                               }
+ 01BE 69C0              xjmp L18
+ 01C0           L44:
+ 01C0           ; 			else{							//发送器件地址出错
+ 01C0           ; 				state=ST_FAIL;
+ 01C0 0027              clr R16
+ 01C2           ;                               }
+ 01C2           ;                       break;
+ 01C2 67C0              xjmp L18
+ 01C4           L49:
+ 01C4           ; 		case ST_RDATA:						//读取数据状态检查，只有读操作模式才能跳到这里
+ 01C4           ; 			state--;						
+ 01C4 0A95              dec R16
+ 01C6           ;                       if(status==TW_MR_DATA_ACK){             
+ 01C6 2035              cpi R18,80
+ 01C8 09F5              brne L50
+ 01CA           X19:
+ 01CA           ; 				*strTWI.pBUF++=TWDR;
+ 01CA 2090BB00          lds R2,187
+ 01CE E0910400          lds R30,_strTWI+4
+ 01D2 F0910500          lds R31,_strTWI+4+1
+ 01D6 2192              st Z+,R2
+ 01D8 F0930500          sts _strTWI+4+1,R31
+ 01DC E0930400          sts _strTWI+4,R30
+ 01E0           ;                               if (strTWI.DATALEN--){          
+ 01E0 20900600          lds R2,_strTWI+6
+ 01E4 30900700          lds R3,_strTWI+6+1
+ 01E8 C101              movw R24,R2
+ 01EA 0197              sbiw R24,1
+ 01EC 90930700          sts _strTWI+6+1,R25
+ 01F0 80930600          sts _strTWI+6,R24
+ 01F4 2220              tst R2
+ 01F6 11F4              brne X20
+ 01F8 3320              tst R3
+ 01FA 21F0              breq L53
+ 01FC           X20:
+ 01FC           ; 					TWCR=(1<<TWEA)|TW_ACT;
+ 01FC 85EC              ldi R24,197
+ 01FE 8093BC00          sts 188,R24
+ 0202           ;                                       }
+ 0202 47C0              xjmp L18
+ 0204           L53:
+ 0204           ; 				else{						
+ 0204           ; 					TWCR=TW_ACT;			
+ 0204 85E8              ldi R24,133
+ 0206 8093BC00          sts 188,R24
+ 020A           ;                                       }
+ 020A           ;                               } 
+ 020A 43C0              xjmp L18
+ 020C           L50:
+ 020C           ; 			else if(status==TW_MR_DATA_NACK){	
+ 020C 2835              cpi R18,88
+ 020E 91F4              brne L56
+ 0210           X21:
+ 0210           ; 				*strTWI.pBUF++=TWDR;
+ 0210 2090BB00          lds R2,187
+ 0214 E0910400          lds R30,_strTWI+4
+ 0218 F0910500          lds R31,_strTWI+4+1
+ 021C 2192              st Z+,R2
+ 021E F0930500          sts _strTWI+4+1,R31
+ 0222 E0930400          sts _strTWI+4,R30
+ 0226           ;                               TWCR=(1<<TWSTO)|TW_ACT;   
+ 0226 85E9              ldi R24,149
+ 0228 8093BC00          sts 188,R24
+ 022C           ;                               strTWI.STATUS=TW_OK;
+ 022C 81E0              ldi R24,1
+ 022E 80930000          sts _strTWI,R24
+ 0232           ;                               }
+ 0232 2FC0              xjmp L18
+ 0234           L56:
+ 0234           ; 			else{							//读取数据出错
+ 0234           ; 				state=ST_FAIL;
+ 0234 0027              clr R16
+ 0236           ;                               }
+ 0236           ;                       break; 
+ 0236 2DC0              xjmp L18
+ 0238           L59:
+ 0238           ; 		case ST_WDATA:						//写数据状态检查，只有写操作模式才能跳到这里
+ 0238           ; 			state--;						
+ 0238 0A95              dec R16
+ 023A           ;                       if(status==TW_MT_DATA_ACK) {    
+ 023A 2832              cpi R18,40
+ 023C 39F5              brne L60
+ 023E           X22:
+ 023E           ; 				if (strTWI.DATALEN) {		
+ 023E 20900600          lds R2,_strTWI+6
+ 0242 30900700          lds R3,_strTWI+6+1
+ 0246 2220              tst R2
+ 0248 11F4              brne X23
+ 024A 3320              tst R3
+ 024C C1F0              breq L62
+ 024E           X23:
+ 024E           ; 					TWDR=*strTWI.pBUF++; 
+ 024E E0910400          lds R30,_strTWI+4
+ 0252 F0910500          lds R31,_strTWI+4+1
+ 0256 2190              ld R2,Z+
+ 0258 F0930500          sts _strTWI+4+1,R31
+ 025C E0930400          sts _strTWI+4,R30
+ 0260 2092BB00          sts 187,R2
+ 0264           ;                                       strTWI.DATALEN--;  
+ 0264 80910600          lds R24,_strTWI+6
+ 0268 90910700          lds R25,_strTWI+6+1
+ 026C 0197              sbiw R24,1
+ 026E 90930700          sts _strTWI+6+1,R25
+ 0272 80930600          sts _strTWI+6,R24
+ 0276           ;                                       TWCR=TW_ACT;
+ 0276 85E8              ldi R24,133
+ 0278 8093BC00          sts 188,R24
+ 027C           ;                                       //触发下一步动作
+ 027C           ;                                       } 
+ 027C 0AC0              xjmp L18
+ 027E           L62:
+ 027E           ; 				else  {						//写够了
+ 027E           ; 					TWCR=(1<<TWSTO)|TW_ACT;
+ 027E 85E9              ldi R24,149
+ 0280 8093BC00          sts 188,R24
+ 0284           ;                                       strTWI.STATUS=TW_OK;  
+ 0284 81E0              ldi R24,1
+ 0286 80930000          sts _strTWI,R24
+ 028A           ;                                       } 
+ 028A           ;                               } 
+ 028A 03C0              xjmp L18
+ 028C           L60:
+ 028C           ; 			else  {							//写数据失败
+ 028C           ; 				state=ST_FAIL; 
+ 028C 0027              clr R16
+ 028E           ;                               }  
+ 028E           ;                       break; 
+ 028E 01C0              xjmp L18
+ 0290           L17:
+ 0290           ; 		default:						//错误状态
+ 0290           ; 			state=ST_FAIL; 
+ 0290 0027              clr R16
+ 0292           ;                       break; 
+ 0292           L18:
+ 0292           ; 		}  
+ 0292           ; 	if (state==ST_FAIL) {				//错误处理
+ 0292 0023              tst R16
+ 0294 89F4              brne L67
+ 0296           X24:
+ 0296           ; 		strTWI.FAILCNT++;  
+ 0296 80910900          lds R24,_strTWI+9
+ 029A 8F5F              subi R24,255    ; addi 1
+ 029C 80930900          sts _strTWI+9,R24
+ 02A0           ;               if (strTWI.FAILCNT<FAIL_MAX) {  
+ 02A0 8431              cpi R24,20
+ 02A2 20F4              brsh L70
+ 02A4           X25:
+ 02A4           ; 			TWCR=(1<<TWSTA)|TW_ACT;		
+ 02A4 85EA              ldi R24,165
+ 02A6 8093BC00          sts 188,R24
+ 02AA           ;                       } 
+ 02AA 06C0              xjmp L71
+ 02AC           L70:
+ 02AC           ; 		else  {							
+ 02AC           ; 			TWCR=(1<<TWSTO)|TW_ACT;		
+ 02AC 85E9              ldi R24,149
+ 02AE 8093BC00          sts 188,R24
+ 02B2           ;                       strTWI.STATUS=TW_FAIL; 
+ 02B2 82E0              ldi R24,2
+ 02B4 80930000          sts _strTWI,R24
+ 02B8           ;                       }
+ 02B8           L71:
+ 02B8           ; 		}  
+ 02B8           L67:
+ 02B8           ; 	state++;  
+ 02B8 0395              inc R16
+ 02BA           ;       strTWI.STATE=state;                                     //保存状态
+ 02BA 00930800          sts _strTWI+8,R16
+ 02BE           L11:
+ 02BE                   .dbline 0 ; func end
+ 02BE 0E940000          xcall pop_xgsetF000
+ 02C2 2990              ld R2,y+
+ 02C4 2FBE              OUT 63,R2
+ 02C6 F991              ld R31,y+
+ 02C8 E991              ld R30,y+
+ 02CA A991              ld R26,y+
+ 02CC 9991              ld R25,y+
+ 02CE 8991              ld R24,y+
+ 02D0 2991              ld R18,y+
+ 02D2 0991              ld R16,y+
+ 02D4 3990              ld R3,y+
+ 02D6 2990              ld R2,y+
+ 02D8 1895              reti
+                        .even
+ 02DA           _TWI_Init::
+ 02DA           ; }  
+ 02DA           ; 
+ 02DA           ; void TWI_Init(void){  
+ 02DA           ; 	PORTD |= 0x03;		//SCL,SDA使能了内部的10K上拉电阻
+ 02DA 8BB1              in R24,0xb
+ 02DC 8360              ori R24,3
+ 02DE 8BB9              out 0xb,R24
+ 02E0           ;       DDRD &= 0xFC;           // 配置为输入引脚
+ 02E0 8AB1              in R24,0xa
+ 02E2 8C7F              andi R24,252
+ 02E4 8AB9              out 0xa,R24
+ 02E6           ;       //TWI初始化
+ 02E6           ;       TWSR=0x00;                      //预分频=0^4=1 
+ 02E6 2224              clr R2
+ 02E8 2092B900          sts 185,R2
+ 02EC           ;       TWBR=TWBR_SET;   
+ 02EC 81E4              ldi R24,65
+ 02EE 8093B800          sts 184,R24
+ 02F2           ;       TWAR=0x00;                      //主机模式，该地址无效
+ 02F2 2092BA00          sts 186,R2
+ 02F6           ;       TWCR=0x00;                      //关闭TWI模块
+ 02F6 2092BC00          sts 188,R2
+ 02FA           ;       strTWI.STATUS=TW_OK; 
+ 02FA 81E0              ldi R24,1
+ 02FC 80930000          sts _strTWI,R24
+ 0300           L74:
+ 0300                   .dbline 0 ; func end
+ 0300 0895              ret
+ 0302           ;            len -> R14,R15
+ 0302           ;            ptr -> R12,R13
+ 0302           ;           addr -> R10,R11
+                        .even
+ 0302           _AT24C256_Read::
+ 0302 0E940000          xcall push_xgset00FC
+ 0306 6901              movw R12,R18
+ 0308 5801              movw R10,R16
+ 030A 2497              sbiw R28,4
+ 030C EA84              ldd R14,y+10
+ 030E FB84              ldd R15,y+11
+ 0310           ; }
+ 0310           ; 
+ 0310           ; unsigned char AT24C256_Read(unsigned int addr,unsigned char *ptr,unsigned int len){
+ 0310           ;       return TWI_RW(SLA_24CXX+(ADDR_24C256<<1)+TW_READ,addr,ptr,len); 
+ 0310 FB82              std y+3,R15
+ 0312 EA82              std y+2,R14
+ 0314 D982              std y+1,R13
+ 0316 C882              std y+0,R12
+ 0318 9501              movw R18,R10
+ 031A 01EA              ldi R16,161
+ 031C 71DE              xcall _TWI_RW
+ 031E           L75:
+ 031E                   .dbline 0 ; func end
+ 031E 2496              adiw R28,4
+ 0320 0C940000          xjmp pop_xgset00FC
+ 0324           ;            len -> R14,R15
+ 0324           ;            ptr -> R12,R13
+ 0324           ;           addr -> R10,R11
+                        .even
+ 0324           _AT24C256_Write::
+ 0324 0E940000          xcall push_xgset00FC
+ 0328 6901              movw R12,R18
+ 032A 5801              movw R10,R16
+ 032C 2497              sbiw R28,4
+ 032E EA84              ldd R14,y+10
+ 0330 FB84              ldd R15,y+11
+ 0332           ; }
+ 0332           ; unsigned char AT24C256_Write(unsigned int addr,unsigned char *ptr,unsigned int len){
+ 0332           ;       return TWI_RW(SLA_24CXX+(ADDR_24C256<<1)+TW_WRITE,addr,ptr,len);        
+ 0332 FB82              std y+3,R15
+ 0334 EA82              std y+2,R14
+ 0336 D982              std y+1,R13
+ 0338 C882              std y+0,R12
+ 033A 9501              movw R18,R10
+ 033C 00EA              ldi R16,160
+ 033E 60DE              xcall _TWI_RW
+ 0340           L76:
+ 0340                   .dbline 0 ; func end
+ 0340 2496              adiw R28,4
+ 0342 0C940000          xjmp pop_xgset00FC
+                        .area bss(ram, con, rel)
+ 0000           _strTWI::
+ 0000                   .blkb 10
+ 000A           _BUFFER::
+ 000A                   .blkb 256
+ 010A           _CMPDATA::
+ 010A                   .blkb 8
+ 0112           ; }
+ 0112           ; 
+ 0112           ;    

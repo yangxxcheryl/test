@@ -1,0 +1,1357 @@
+                        .module Libcommon.c
+                        .area text(rom, con, rel)
+                        .even
+ 0000           _InitFlowMeter::
+ 0000           ; 
+ 0000           ; #include <iom1280v.h>
+ 0000           ; #include "B1404_LIB.h"
+ 0000           ; #include "LibCommon.h"
+ 0000           ; #include "eeprom.h"
+ 0000           ; 
+ 0000           ; 
+ 0000           ; /*********************** 泵定标 ****************************/
+ 0000           ; 
+ 0000           ; FLOW_CAL_CHART _DiluentCalChart;
+ 0000           ; unsigned int DiluentCoff[14];		// 稀释校准因数，校准吸样量，反向因数，值越大调整结果越小
+ 0000           ; 
+ 0000           ; unsigned int _FlowNum0, _FlowNum1;
+ 0000           ; 
+ 0000           ; // 初始化流量定标判断
+ 0000           ; void InitFlowMeter(void){
+ 0000           ; 	_FlowNum0 = 0;
+ 0000 2224              clr R2
+ 0002 3324              clr R3
+ 0004 30920300          sts __FlowNum0+1,R3
+ 0008 20920200          sts __FlowNum0,R2
+ 000C           ;       _FlowNum1 = 0;
+ 000C 30920100          sts __FlowNum1+1,R3
+ 0010 20920000          sts __FlowNum1,R2
+ 0014           L2:
+ 0014                   .dbline 0 ; func end
+ 0014 0895              ret
+ 0016           ;              m -> R14,R15
+ 0016           ;              n -> R10,R11
+ 0016           ;              i -> R12,R13
+                        .even
+ 0016           _JudgeFlowMeter::
+ 0016 0E940000          xcall push_xgset00FC
+ 001A 6801              movw R12,R16
+ 001C           ; }
+ 001C           ; 
+ 001C           ; // 流量定标数据判断处理
+ 001C           ; unsigned int JudgeFlowMeter(unsigned int i)
+ 001C           ; {
+ 001C           ;       unsigned int m, n;
+ 001C           ;       if(_FlowNum0 == 0)
+ 001C 20900200          lds R2,__FlowNum0
+ 0020 30900300          lds R3,__FlowNum0+1
+ 0024 2220              tst R2
+ 0026 49F4              brne L4
+ 0028 3320              tst R3
+ 002A 39F4              brne L4
+ 002C           X0:
+ 002C           ; 	{
+ 002C           ; 		_FlowNum0 = i;
+ 002C D0920300          sts __FlowNum0+1,R13
+ 0030 C0920200          sts __FlowNum0,R12
+ 0034           ;               return 0;
+ 0034 0027              clr R16
+ 0036 1127              clr R17
+ 0038 76C0              xjmp L3
+ 003A           L4:
+ 003A           ; 	}
+ 003A           ; 	if(_FlowNum1 == 0)
+ 003A 20900000          lds R2,__FlowNum1
+ 003E 30900100          lds R3,__FlowNum1+1
+ 0042 2220              tst R2
+ 0044 39F4              brne L6
+ 0046 3320              tst R3
+ 0048 29F4              brne L6
+ 004A           X1:
+ 004A           ; 	{
+ 004A           ; 		_FlowNum1 = i;
+ 004A D0920100          sts __FlowNum1+1,R13
+ 004E C0920000          sts __FlowNum1,R12
+ 0052           ;       }
+ 0052 3FC0              xjmp L7
+ 0054           L6:
+ 0054           ; 	else
+ 0054           ; 	{
+ 0054           ; 		m = AbsDifference(i, _FlowNum0);
+ 0054 20910200          lds R18,__FlowNum0
+ 0058 30910300          lds R19,__FlowNum0+1
+ 005C 8601              movw R16,R12
+ 005E 57D3              xcall _AbsDifference
+ 0060 7801              movw R14,R16
+ 0062           ;               n = AbsDifference(i, _FlowNum1);
+ 0062 20910000          lds R18,__FlowNum1
+ 0066 30910100          lds R19,__FlowNum1+1
+ 006A 8601              movw R16,R12
+ 006C 50D3              xcall _AbsDifference
+ 006E 5801              movw R10,R16
+ 0070           ;               if(m > n)
+ 0070 0E15              cp R16,R14
+ 0072 1F05              cpc R17,R15
+ 0074 B8F4              brsh L8
+ 0076           X2:
+ 0076           ; 		{
+ 0076           ; 			if(n <= 8)
+ 0076 88E0              ldi R24,8
+ 0078 90E0              ldi R25,0
+ 007A 8017              cp R24,R16
+ 007C 9107              cpc R25,R17
+ 007E 28F0              brlo L10
+ 0080           X3:
+ 0080           ; 				_FlowNum0 = i;
+ 0080 D0920300          sts __FlowNum0+1,R13
+ 0084 C0920200          sts __FlowNum0,R12
+ 0088 24C0              xjmp L9
+ 008A           L10:
+ 008A           ; 			else
+ 008A           ; 			{
+ 008A           ; 				_FlowNum0 = 0;
+ 008A 2224              clr R2
+ 008C 3324              clr R3
+ 008E 30920300          sts __FlowNum0+1,R3
+ 0092 20920200          sts __FlowNum0,R2
+ 0096           ;                               _FlowNum1 = 0;
+ 0096 30920100          sts __FlowNum1+1,R3
+ 009A 20920000          sts __FlowNum1,R2
+ 009E           ;                               return 0;
+ 009E 0027              clr R16
+ 00A0 1127              clr R17
+ 00A2 41C0              xjmp L3
+ 00A4           L8:
+ 00A4           ; 			}
+ 00A4           ; 		}
+ 00A4           ; 		else
+ 00A4           ; 		{
+ 00A4           ; 			if(m <= 8)
+ 00A4 88E0              ldi R24,8
+ 00A6 90E0              ldi R25,0
+ 00A8 8E15              cp R24,R14
+ 00AA 9F05              cpc R25,R15
+ 00AC 28F0              brlo L12
+ 00AE           X4:
+ 00AE           ; 				_FlowNum1 = i;
+ 00AE D0920100          sts __FlowNum1+1,R13
+ 00B2 C0920000          sts __FlowNum1,R12
+ 00B6 0DC0              xjmp L13
+ 00B8           L12:
+ 00B8           ; 			else
+ 00B8           ; 			{
+ 00B8           ; 				_FlowNum0 = 0;
+ 00B8 2224              clr R2
+ 00BA 3324              clr R3
+ 00BC 30920300          sts __FlowNum0+1,R3
+ 00C0 20920200          sts __FlowNum0,R2
+ 00C4           ;                               _FlowNum1 = 0;
+ 00C4 30920100          sts __FlowNum1+1,R3
+ 00C8 20920000          sts __FlowNum1,R2
+ 00CC           ;                               return 0;
+ 00CC 0027              clr R16
+ 00CE 1127              clr R17
+ 00D0 2AC0              xjmp L3
+ 00D2           L13:
+ 00D2           ; 			}
+ 00D2           ; 		}
+ 00D2           L9:
+ 00D2           ; 	}
+ 00D2           L7:
+ 00D2           ; 	n = AbsDifference(_FlowNum0, _FlowNum1);
+ 00D2 20910000          lds R18,__FlowNum1
+ 00D6 30910100          lds R19,__FlowNum1+1
+ 00DA 00910200          lds R16,__FlowNum0
+ 00DE 10910300          lds R17,__FlowNum0+1
+ 00E2 15D3              xcall _AbsDifference
+ 00E4 6801              movw R12,R16
+ 00E6 5601              movw R10,R12
+ 00E8           ;       if(n <= 8)
+ 00E8 88E0              ldi R24,8
+ 00EA 90E0              ldi R25,0
+ 00EC 8017              cp R24,R16
+ 00EE 9107              cpc R25,R17
+ 00F0 C0F0              brlo L14
+ 00F2           X5:
+ 00F2           ; 	{
+ 00F2           ; 		n = (_FlowNum0 + _FlowNum1) / 2;
+ 00F2 20900000          lds R2,__FlowNum1
+ 00F6 30900100          lds R3,__FlowNum1+1
+ 00FA A0900200          lds R10,__FlowNum0
+ 00FE B0900300          lds R11,__FlowNum0+1
+ 0102 A20C              add R10,R2
+ 0104 B31C              adc R11,R3
+ 0106 B694              lsr R11
+ 0108 A794              ror R10
+ 010A           ;               _FlowNum0 = 0;
+ 010A 2224              clr R2
+ 010C 3324              clr R3
+ 010E 30920300          sts __FlowNum0+1,R3
+ 0112 20920200          sts __FlowNum0,R2
+ 0116           ;               _FlowNum1 = 0;
+ 0116 30920100          sts __FlowNum1+1,R3
+ 011A 20920000          sts __FlowNum1,R2
+ 011E           ;               return n;
+ 011E 8501              movw R16,R10
+ 0120 02C0              xjmp L3
+ 0122           L14:
+ 0122           ; 	}
+ 0122           ; 	else
+ 0122           ; 		return 0;
+ 0122 0027              clr R16
+ 0124 1127              clr R17
+ 0126           L3:
+ 0126                   .dbline 0 ; func end
+ 0126 0C940000          xjmp pop_xgset00FC
+ 012A           ;            cal -> R20,R21
+ 012A           ;          calLD -> R12,R13
+ 012A           ;          calHD -> R10,R11
+ 012A           ;            sum -> y+2
+ 012A           ;            cnt -> R14
+ 012A           ;              i -> R22
+ 012A           ;              n -> y+14
+                        .even
+ 012A           _InsetrDiluentFlowCalValue::
+ 012A 1A93              st -y,r17
+ 012C 0A93              st -y,r16
+ 012E 0E940000          xcall push_xgsetF0FC
+ 0132 2497              sbiw R28,4
+ 0134           ; }
+ 0134           ; 
+ 0134           ; unsigned int InsetrDiluentFlowCalValue(unsigned int n)
+ 0134           ; {
+ 0134           ;       unsigned int sum, cal, calHD, calLD;
+ 0134           ;       unsigned char cnt, i;
+ 0134           ; 
+ 0134           ;       Read_DiluentCalChart();
+ 0134 BCD0              xcall _Read_DiluentCalChart
+ 0136           ; 
+ 0136           ;       if(_DiluentCalChart.pnt >= _FLOW_CAL_LIST_NUM)
+ 0136 80912A00          lds R24,__DiluentCalChart+10
+ 013A 8530              cpi R24,5
+ 013C 18F0              brlo L17
+ 013E           X6:
+ 013E           ; 		_DiluentCalChart.pnt = 0;
+ 013E 2224              clr R2
+ 0140 20922A00          sts __DiluentCalChart+10,R2
+ 0144           L17:
+ 0144           ; 	_DiluentCalChart.list[_DiluentCalChart.pnt] = n;	// 存入新的定标值
+ 0144 80E0              ldi R24,<__DiluentCalChart
+ 0146 90E0              ldi R25,>__DiluentCalChart
+ 0148 E0912A00          lds R30,__DiluentCalChart+10
+ 014C FF27              clr R31
+ 014E EE0F              lsl R30
+ 0150 FF1F              rol R31
+ 0152 E80F              add R30,R24
+ 0154 F91F              adc R31,R25
+ 0156 0E84              ldd R0,y+14
+ 0158 1F84              ldd R1,y+15
+ 015A 1182              std z+1,R1
+ 015C 0082              std z+0,R0
+ 015E           ;       _DiluentCalChart.pnt ++;
+ 015E 80912A00          lds R24,__DiluentCalChart+10
+ 0162 8F5F              subi R24,255    ; addi 1
+ 0164 80932A00          sts __DiluentCalChart+10,R24
+ 0168           ;       
+ 0168           ;       // 计算新的定标结果
+ 0168           ;       sum = 0;        
+ 0168 0024              clr R0
+ 016A 1124              clr R1
+ 016C 1B82              std y+3,R1
+ 016E 0A82              std y+2,R0
+ 0170           ;       cnt = 0;
+ 0170 EE24              clr R14
+ 0172           ;       for(i=0; i<_FLOW_CAL_LIST_NUM; i++)
+ 0172 6627              clr R22
+ 0174 26C0              xjmp L26
+ 0176           L23:
+ 0176           ; 	{
+ 0176           ; 		if(_DiluentCalChart.list[i]>_DILUENT_PUMP_BASE_COEFF_DOWN && _DiluentCalChart.list[i]<_DILUENT_PUMP_BASE_COEFF_UP)
+ 0176 80E0              ldi R24,<__DiluentCalChart
+ 0178 90E0              ldi R25,>__DiluentCalChart
+ 017A E62F              mov R30,R22
+ 017C FF27              clr R31
+ 017E EE0F              lsl R30
+ 0180 FF1F              rol R31
+ 0182 E80F              add R30,R24
+ 0184 F91F              adc R31,R25
+ 0186 2080              ldd R2,z+0
+ 0188 3180              ldd R3,z+1
+ 018A 87EC              ldi R24,455
+ 018C 91E0              ldi R25,1
+ 018E 8215              cp R24,R2
+ 0190 9305              cpc R25,R3
+ 0192 B0F4              brsh L27
+ 0194           X7:
+ 0194 C101              movw R24,R2
+ 0196 8032              cpi R24,32
+ 0198 E3E0              ldi R30,3
+ 019A 9E07              cpc R25,R30
+ 019C 88F4              brsh L27
+ 019E           X8:
+ 019E           ; 		{
+ 019E           ; 			sum += _DiluentCalChart.list[i];
+ 019E 80E0              ldi R24,<__DiluentCalChart
+ 01A0 90E0              ldi R25,>__DiluentCalChart
+ 01A2 E62F              mov R30,R22
+ 01A4 FF27              clr R31
+ 01A6 EE0F              lsl R30
+ 01A8 FF1F              rol R31
+ 01AA E80F              add R30,R24
+ 01AC F91F              adc R31,R25
+ 01AE 2080              ldd R2,z+0
+ 01B0 3180              ldd R3,z+1
+ 01B2 0A80              ldd R0,y+2
+ 01B4 1B80              ldd R1,y+3
+ 01B6 020C              add R0,R2
+ 01B8 131C              adc R1,R3
+ 01BA 1B82              std y+3,R1
+ 01BC 0A82              std y+2,R0
+ 01BE           ;                       cnt ++;
+ 01BE E394              inc R14
+ 01C0           ;               }
+ 01C0           L27:
+ 01C0           ; 	}
+ 01C0           L24:
+ 01C0 6395              inc R22
+ 01C2           L26:
+ 01C2 6530              cpi R22,5
+ 01C4 C0F2              brlo L23
+ 01C6           X9:
+ 01C6           ; 	cal = sum/cnt;
+ 01C6 2E2D              mov R18,R14
+ 01C8 3327              clr R19
+ 01CA 0A81              ldd R16,y+2
+ 01CC 1B81              ldd R17,y+3
+ 01CE 0E940000          xcall div16u
+ 01D2 A801              movw R20,R16
+ 01D4           ;       sum = 0;        
+ 01D4 0024              clr R0
+ 01D6 1124              clr R1
+ 01D8 1B82              std y+3,R1
+ 01DA 0A82              std y+2,R0
+ 01DC           ;       cnt = 0;
+ 01DC EE24              clr R14
+ 01DE           ;       calHD = cal + 6;
+ 01DE CA01              movw R24,R20
+ 01E0 0696              adiw R24,6
+ 01E2 5C01              movw R10,R24
+ 01E4           ;       calLD = cal - 6;
+ 01E4 CA01              movw R24,R20
+ 01E6 0697              sbiw R24,6
+ 01E8 6C01              movw R12,R24
+ 01EA           ;       for(i=0; i<_FLOW_CAL_LIST_NUM; i++)
+ 01EA 6627              clr R22
+ 01EC 20C0              xjmp L32
+ 01EE           L29:
+ 01EE           ; 	{
+ 01EE           ; 		if(_DiluentCalChart.list[i]>calLD && _DiluentCalChart.list[i] < calHD)
+ 01EE 80E0              ldi R24,<__DiluentCalChart
+ 01F0 90E0              ldi R25,>__DiluentCalChart
+ 01F2 E62F              mov R30,R22
+ 01F4 FF27              clr R31
+ 01F6 EE0F              lsl R30
+ 01F8 FF1F              rol R31
+ 01FA E80F              add R30,R24
+ 01FC F91F              adc R31,R25
+ 01FE 2080              ldd R2,z+0
+ 0200 3180              ldd R3,z+1
+ 0202 C214              cp R12,R2
+ 0204 D304              cpc R13,R3
+ 0206 90F4              brsh L33
+ 0208           X10:
+ 0208 2A14              cp R2,R10
+ 020A 3B04              cpc R3,R11
+ 020C 78F4              brsh L33
+ 020E           X11:
+ 020E           ; 		{
+ 020E           ; 			sum += _DiluentCalChart.list[i];
+ 020E E62F              mov R30,R22
+ 0210 FF27              clr R31
+ 0212 EE0F              lsl R30
+ 0214 FF1F              rol R31
+ 0216 E80F              add R30,R24
+ 0218 F91F              adc R31,R25
+ 021A 2080              ldd R2,z+0
+ 021C 3180              ldd R3,z+1
+ 021E 0A80              ldd R0,y+2
+ 0220 1B80              ldd R1,y+3
+ 0222 020C              add R0,R2
+ 0224 131C              adc R1,R3
+ 0226 1B82              std y+3,R1
+ 0228 0A82              std y+2,R0
+ 022A           ;                       cnt ++;
+ 022A E394              inc R14
+ 022C           ;                       }
+ 022C           L33:
+ 022C           ; 	}
+ 022C           L30:
+ 022C 6395              inc R22
+ 022E           L32:
+ 022E 6530              cpi R22,5
+ 0230 F0F2              brlo L29
+ 0232           X12:
+ 0232           ; 	if(cnt != 0)
+ 0232 EE20              tst R14
+ 0234 41F0              breq L35
+ 0236           X13:
+ 0236           ; 		cal = sum/cnt;
+ 0236 2E2D              mov R18,R14
+ 0238 3327              clr R19
+ 023A 0A81              ldd R16,y+2
+ 023C 1B81              ldd R17,y+3
+ 023E 0E940000          xcall div16u
+ 0242 A801              movw R20,R16
+ 0244 02C0              xjmp L36
+ 0246           L35:
+ 0246           ; 	else
+ 0246           ; 		cal = 0;
+ 0246 4427              clr R20
+ 0248 5527              clr R21
+ 024A           L36:
+ 024A           ; 	Uart0ReUnable;
+ 024A 8091C100          lds R24,193
+ 024E 8F7E              andi R24,239
+ 0250 8093C100          sts 193,R24
+ 0254           ;       uart_Printf("// CurCalib:[cal]%d [n]%d\r\n", cal, n);
+ 0254 0E84              ldd R0,y+14
+ 0256 1F84              ldd R1,y+15
+ 0258 1982              std y+1,R1
+ 025A 0882              std y+0,R0
+ 025C 9A01              movw R18,R20
+ 025E 00E0              ldi R16,<L37
+ 0260 10E0              ldi R17,>L37
+ 0262 0E940000          xcall _uart_Printf
+ 0266           ;       Uart0ReEnable; ;
+ 0266 8091C100          lds R24,193
+ 026A 8061              ori R24,16
+ 026C 8093C100          sts 193,R24
+ 0270           ;       if(cal)
+ 0270 4030              cpi R20,0
+ 0272 4507              cpc R20,R21
+ 0274 99F0              breq L38
+ 0276           X14:
+ 0276           ; 	{
+ 0276           ; 		if((n > (cal-6)) && (n < (cal+6)))
+ 0276 CA01              movw R24,R20
+ 0278 0697              sbiw R24,6
+ 027A 0E84              ldd R0,y+14
+ 027C 1F84              ldd R1,y+15
+ 027E 8015              cp R24,R0
+ 0280 9105              cpc R25,R1
+ 0282 50F4              brsh L40
+ 0284           X15:
+ 0284 CA01              movw R24,R20
+ 0286 0696              adiw R24,6
+ 0288 0816              cp R0,R24
+ 028A 1906              cpc R1,R25
+ 028C 28F4              brsh L40
+ 028E           X16:
+ 028E           ; 		{
+ 028E           ; 			_DiluentCalChart.calValue = cal;
+ 028E 50932C00          sts __DiluentCalChart+11+1,R21
+ 0292 40932B00          sts __DiluentCalChart+11,R20
+ 0296           ;               }
+ 0296 02C0              xjmp L41
+ 0298           L40:
+ 0298           ; 		else
+ 0298           ; 		{
+ 0298           ; 			cal = 0;
+ 0298 4427              clr R20
+ 029A 5527              clr R21
+ 029C           ;               }
+ 029C           L41:
+ 029C           ; 	}
+ 029C           L38:
+ 029C           ; 	Save_DiluentCalChart(9);
+ 029C 09E0              ldi R16,9
+ 029E 10E0              ldi R17,0
+ 02A0 FAD0              xcall _Save_DiluentCalChart
+ 02A2           ;       return cal;
+ 02A2 8A01              movw R16,R20
+ 02A4           L16:
+ 02A4                   .dbline 0 ; func end
+ 02A4 2496              adiw R28,4
+ 02A6 0E940000          xcall pop_xgsetF0FC
+ 02AA 2296              adiw R28,2
+ 02AC 0895              ret
+ 02AE           ;             l3 -> y+10
+ 02AE           ;             l2 -> y+6
+ 02AE           ;             l1 -> y+2
+ 02AE           ;              i -> R10,R11
+                        .even
+ 02AE           _Read_DiluentCalChart::
+ 02AE 0E940000          xcall push_xgsetF00C
+ 02B2 2E97              sbiw R28,14
+ 02B4           ; }
+ 02B4           ; 
+ 02B4           ; void Read_DiluentCalChart(void)
+ 02B4           ; {
+ 02B4           ;       unsigned long l1,l2,l3;
+ 02B4           ;       unsigned int i;
+ 02B4           ;       EEPROM_READ(EEP_ADD_CAL_DAT, _DiluentCalChart);
+ 02B4 89E2              ldi R24,41
+ 02B6 90E0              ldi R25,0
+ 02B8 9983              std y+1,R25
+ 02BA 8883              std y+0,R24
+ 02BC 20E0              ldi R18,<__DiluentCalChart
+ 02BE 30E0              ldi R19,>__DiluentCalChart
+ 02C0 04E6              ldi R16,100
+ 02C2 10E0              ldi R17,0
+ 02C4 0E940000          xcall _EEPROMReadBytes_extIO
+ 02C8           ;       // 检查仪器校准因数和法性
+ 02C8           ;       for(i = 1;i < 14;++i)
+ 02C8 81E0              ldi R24,1
+ 02CA 90E0              ldi R25,0
+ 02CC 5C01              movw R10,R24
+ 02CE 28C0              xjmp L47
+ 02D0           L44:
+ 02D0           ; 	{
+ 02D0           ; 		if(_DiluentCalChart.calStand[i] < _DILUENT_MIX_BASE_COEFF_DOWN || _DiluentCalChart.calStand[i] > _DILUENT_MIX_BASE_COEFF_UP)
+ 02D0 1501              movw R2,R10
+ 02D2 220C              lsl R2
+ 02D4 331C              rol R3
+ 02D6 80E0              ldi R24,<__DiluentCalChart+13
+ 02D8 90E0              ldi R25,>__DiluentCalChart+13
+ 02DA F101              movw R30,R2
+ 02DC E80F              add R30,R24
+ 02DE F91F              adc R31,R25
+ 02E0 8081              ldd R24,z+0
+ 02E2 9181              ldd R25,z+1
+ 02E4 8A30              cpi R24,10
+ 02E6 E0E0              ldi R30,0
+ 02E8 9E07              cpc R25,R30
+ 02EA 60F0              brlo L52
+ 02EC           X17:
+ 02EC 80E0              ldi R24,<__DiluentCalChart+13
+ 02EE 90E0              ldi R25,>__DiluentCalChart+13
+ 02F0 F101              movw R30,R2
+ 02F2 E80F              add R30,R24
+ 02F4 F91F              adc R31,R25
+ 02F6 2080              ldd R2,z+0
+ 02F8 3180              ldd R3,z+1
+ 02FA 8AEF              ldi R24,250
+ 02FC 90E0              ldi R25,0
+ 02FE 8215              cp R24,R2
+ 0300 9305              cpc R25,R3
+ 0302 58F4              brsh L48
+ 0304           X18:
+ 0304           L52:
+ 0304           ; 		{
+ 0304           ; 			_DiluentCalChart.calStand[i] = _DILUENT_MIX_BASE_COEFF;
+ 0304 80E0              ldi R24,<__DiluentCalChart+13
+ 0306 90E0              ldi R25,>__DiluentCalChart+13
+ 0308 F501              movw R30,R10
+ 030A EE0F              lsl R30
+ 030C FF1F              rol R31
+ 030E E80F              add R30,R24
+ 0310 F91F              adc R31,R25
+ 0312 84E6              ldi R24,100
+ 0314 90E0              ldi R25,0
+ 0316 9183              std z+1,R25
+ 0318 8083              std z+0,R24
+ 031A           ;               }
+ 031A           L48:
+ 031A           ; 	}
+ 031A           L45:
+ 031A C501              movw R24,R10
+ 031C 0196              adiw R24,1
+ 031E 5C01              movw R10,R24
+ 0320           L47:
+ 0320 C501              movw R24,R10
+ 0322 8E30              cpi R24,14
+ 0324 E0E0              ldi R30,0
+ 0326 9E07              cpc R25,R30
+ 0328 08F4              brsh X23
+ 032A D2CF              xjmp L44
+ 032C           X23:
+ 032C           X19:
+ 032C           ; 	EEPROM_WRITE(EEP_ADD_CAL_DAT, _DiluentCalChart);	
+ 032C 89E2              ldi R24,41
+ 032E 90E0              ldi R25,0
+ 0330 9983              std y+1,R25
+ 0332 8883              std y+0,R24
+ 0334 20E0              ldi R18,<__DiluentCalChart
+ 0336 30E0              ldi R19,>__DiluentCalChart
+ 0338 04E6              ldi R16,100
+ 033A 10E0              ldi R17,0
+ 033C 0E940000          xcall _EEPROMWriteBytes_extIO
+ 0340           ;       
+ 0340           ;       // 检查稀释液泵校准因数和法性
+ 0340           ;       if(_DiluentCalChart.calValue < _DILUENT_PUMP_BASE_COEFF_DOWN || _DiluentCalChart.calValue > _DILUENT_PUMP_BASE_COEFF_UP)
+ 0340 80912B00          lds R24,__DiluentCalChart+11
+ 0344 90912C00          lds R25,__DiluentCalChart+11+1
+ 0348 873C              cpi R24,199
+ 034A E1E0              ldi R30,1
+ 034C 9E07              cpc R25,R30
+ 034E 48F0              brlo L58
+ 0350           X20:
+ 0350 80E2              ldi R24,800
+ 0352 93E0              ldi R25,3
+ 0354 20902B00          lds R2,__DiluentCalChart+11
+ 0358 30902C00          lds R3,__DiluentCalChart+11+1
+ 035C 8215              cp R24,R2
+ 035E 9305              cpc R25,R3
+ 0360 D8F4              brsh L54
+ 0362           X21:
+ 0362           L58:
+ 0362           ; 	{
+ 0362           ; 		// 初始化校准数据
+ 0362           ; 		_DiluentCalChart.calValue = _DILUENT_PUMP_BASE_COEFF;
+ 0362 81E7              ldi R24,625
+ 0364 92E0              ldi R25,2
+ 0366 90932C00          sts __DiluentCalChart+11+1,R25
+ 036A 80932B00          sts __DiluentCalChart+11,R24
+ 036E           ;               _DiluentCalChart.pnt = 0;
+ 036E 2224              clr R2
+ 0370 20922A00          sts __DiluentCalChart+10,R2
+ 0374           ;               _DiluentCalChart.list[0] = _DILUENT_PUMP_BASE_COEFF;
+ 0374 90932100          sts __DiluentCalChart+1,R25
+ 0378 80932000          sts __DiluentCalChart,R24
+ 037C           ;               _DiluentCalChart.pnt ++;
+ 037C 822D              mov R24,R2
+ 037E 8F5F              subi R24,255    ; addi 1
+ 0380 80932A00          sts __DiluentCalChart+10,R24
+ 0384           ;               EEPROM_WRITE(EEP_ADD_CAL_DAT, _DiluentCalChart);
+ 0384 89E2              ldi R24,41
+ 0386 90E0              ldi R25,0
+ 0388 9983              std y+1,R25
+ 038A 8883              std y+0,R24
+ 038C 20E0              ldi R18,<__DiluentCalChart
+ 038E 30E0              ldi R19,>__DiluentCalChart
+ 0390 04E6              ldi R16,100
+ 0392 10E0              ldi R17,0
+ 0394 0E940000          xcall _EEPROMWriteBytes_extIO
+ 0398           ;       }
+ 0398           L54:
+ 0398           ; 	// 计算当前稀释校准因数
+ 0398           ; 	l3 = _DiluentCalChart.calValue;
+ 0398 20902B00          lds R2,__DiluentCalChart+11
+ 039C 30902C00          lds R3,__DiluentCalChart+11+1
+ 03A0 4424              clr R4
+ 03A2 5524              clr R5
+ 03A4 2A86              std y+10,R2
+ 03A6 3B86              std y+11,R3
+ 03A8 4C86              std y+12,R4
+ 03AA 5D86              std y+13,R5
+ 03AC           ;       
+ 03AC           ;       Uart0ReUnable;
+ 03AC 8091C100          lds R24,193
+ 03B0 8F7E              andi R24,239
+ 03B2 8093C100          sts 193,R24
+ 03B6           ;       uart_Printf("//DiluentCoff $ %4d\r\n", l3);
+ 03B6 2A84              ldd R2,y+10
+ 03B8 3B84              ldd R3,y+11
+ 03BA 4C84              ldd R4,y+12
+ 03BC 5D84              ldd R5,y+13
+ 03BE 4882              std y+0,R4
+ 03C0 5982              std y+1,R5
+ 03C2 9101              movw R18,R2
+ 03C4 00E0              ldi R16,<L63
+ 03C6 10E0              ldi R17,>L63
+ 03C8 0E940000          xcall _uart_Printf
+ 03CC           ;       Uart0ReEnable;
+ 03CC 8091C100          lds R24,193
+ 03D0 8061              ori R24,16
+ 03D2 8093C100          sts 193,R24
+ 03D6           ;               
+ 03D6           ;       for(i = 1;i < 14;i++)
+ 03D6 81E0              ldi R24,1
+ 03D8 90E0              ldi R25,0
+ 03DA 5C01              movw R10,R24
+ 03DC 53C0              xjmp L67
+ 03DE           L64:
+ 03DE           ; 	{
+ 03DE           ; 		l2 = _DiluentCalChart.calStand[i];
+ 03DE 80E0              ldi R24,<__DiluentCalChart+13
+ 03E0 90E0              ldi R25,>__DiluentCalChart+13
+ 03E2 F501              movw R30,R10
+ 03E4 EE0F              lsl R30
+ 03E6 FF1F              rol R31
+ 03E8 E80F              add R30,R24
+ 03EA F91F              adc R31,R25
+ 03EC 2080              ldd R2,z+0
+ 03EE 3180              ldd R3,z+1
+ 03F0 4424              clr R4
+ 03F2 5524              clr R5
+ 03F4 2E82              std y+6,R2
+ 03F6 3F82              std y+7,R3
+ 03F8 4886              std y+8,R4
+ 03FA 5986              std y+9,R5
+ 03FC           ;               l1 = (l3 * l2)/_DILUENT_MIX_BASE_COEFF;
+ 03FC 2E80              ldd R2,y+6
+ 03FE 3F80              ldd R3,y+7
+ 0400 4884              ldd R4,y+8
+ 0402 5984              ldd R5,y+9
+ 0404 0A85              ldd R16,y+10
+ 0406 1B85              ldd R17,y+11
+ 0408 2C85              ldd R18,y+12
+ 040A 3D85              ldd R19,y+13
+ 040C 5A92              st -y,R5
+ 040E 4A92              st -y,R4
+ 0410 3A92              st -y,R3
+ 0412 2A92              st -y,R2
+ 0414 0E940000          xcall empy32u
+ 0418 44E6              ldi R20,100
+ 041A 50E0              ldi R21,0
+ 041C 60E0              ldi R22,0
+ 041E 70E0              ldi R23,0
+ 0420 7A93              st -y,R23
+ 0422 6A93              st -y,R22
+ 0424 5A93              st -y,R21
+ 0426 4A93              st -y,R20
+ 0428 0E940000          xcall div32u
+ 042C 0A83              std y+2,R16
+ 042E 1B83              std y+3,R17
+ 0430 2C83              std y+4,R18
+ 0432 3D83              std y+5,R19
+ 0434           ;               DiluentCoff[i] = (unsigned int)l1;
+ 0434 80E0              ldi R24,<_DiluentCoff
+ 0436 90E0              ldi R25,>_DiluentCoff
+ 0438 F501              movw R30,R10
+ 043A EE0F              lsl R30
+ 043C FF1F              rol R31
+ 043E E80F              add R30,R24
+ 0440 F91F              adc R31,R25
+ 0442 2A80              ldd R2,y+2
+ 0444 3B80              ldd R3,y+3
+ 0446 3182              std z+1,R3
+ 0448 2082              std z+0,R2
+ 044A           ;               
+ 044A           ;               Uart0ReUnable;
+ 044A 8091C100          lds R24,193
+ 044E 8F7E              andi R24,239
+ 0450 8093C100          sts 193,R24
+ 0454           ;               uart_Printf("//[%d] $ %4d\r\n", i, DiluentCoff[i]);
+ 0454 80E0              ldi R24,<_DiluentCoff
+ 0456 90E0              ldi R25,>_DiluentCoff
+ 0458 F501              movw R30,R10
+ 045A EE0F              lsl R30
+ 045C FF1F              rol R31
+ 045E E80F              add R30,R24
+ 0460 F91F              adc R31,R25
+ 0462 2080              ldd R2,z+0
+ 0464 3180              ldd R3,z+1
+ 0466 3982              std y+1,R3
+ 0468 2882              std y+0,R2
+ 046A 9501              movw R18,R10
+ 046C 00E0              ldi R16,<L69
+ 046E 10E0              ldi R17,>L69
+ 0470 0E940000          xcall _uart_Printf
+ 0474           ;               Uart0ReEnable;
+ 0474 8091C100          lds R24,193
+ 0478 8061              ori R24,16
+ 047A 8093C100          sts 193,R24
+ 047E           ;       }
+ 047E           L65:
+ 047E C501              movw R24,R10
+ 0480 0196              adiw R24,1
+ 0482 5C01              movw R10,R24
+ 0484           L67:
+ 0484 C501              movw R24,R10
+ 0486 8E30              cpi R24,14
+ 0488 E0E0              ldi R30,0
+ 048A 9E07              cpc R25,R30
+ 048C 08F4              brsh X24
+ 048E A7CF              xjmp L64
+ 0490           X24:
+ 0490           X22:
+ 0490           L43:
+ 0490                   .dbline 0 ; func end
+ 0490 2E96              adiw R28,14
+ 0492 0C940000          xjmp pop_xgsetF00C
+ 0496           ;             l2 -> y+6
+ 0496           ;             l1 -> y+2
+ 0496           ;              m -> R10,R11
+                        .even
+ 0496           _Save_DiluentCalChart::
+ 0496 0E940000          xcall push_xgsetF00C
+ 049A 5801              movw R10,R16
+ 049C 2A97              sbiw R28,10
+ 049E           ; }
+ 049E           ; /*
+ 049E           ; void Save_DiluentCalChart(void){
+ 049E           ;       unsigned long l1, l2;
+ 049E           ;       // 检查仪器校准因数和法性
+ 049E           ;       if(_DiluentCalChart.calStand < _DILUENT_MIX_BASE_COEFF_DOWN)
+ 049E           ;               _DiluentCalChart.calStand = _DILUENT_MIX_BASE_COEFF_DOWN;
+ 049E           ;       if(_DiluentCalChart.calStand > _DILUENT_MIX_BASE_COEFF_UP)
+ 049E           ;               _DiluentCalChart.calStand = _DILUENT_MIX_BASE_COEFF_UP;
+ 049E           ;       // 检查稀释液泵校准因数和法性
+ 049E           ;       if(_DiluentCalChart.calValue < _DILUENT_PUMP_BASE_COEFF_DOWN)
+ 049E           ;               _DiluentCalChart.calValue = _DILUENT_PUMP_BASE_COEFF_DOWN;
+ 049E           ;       if(_DiluentCalChart.calValue > _DILUENT_PUMP_BASE_COEFF_UP)
+ 049E           ;               _DiluentCalChart.calValue = _DILUENT_PUMP_BASE_COEFF_UP;
+ 049E           ;       EEPROM_WRITE(EEP_ADD_CAL_DAT, _DiluentCalChart);
+ 049E           ;       // 重新计算当前稀释校准因数
+ 049E           ;       l1 = _DiluentCalChart.calValue;
+ 049E           ;       l2 = _DiluentCalChart.calStand;
+ 049E           ;       l1 = (l1*l2)/_DILUENT_MIX_BASE_COEFF;
+ 049E           ;       DiluentCoff = (unsigned int)l1;
+ 049E           ; }
+ 049E           ; */
+ 049E           ; // 2016-06-21 Save_DiluentCalChart 改为返回值函数，返回稀释校准因素
+ 049E           ; unsigned int Save_DiluentCalChart(unsigned int m)
+ 049E           ; {
+ 049E           ;       unsigned long l1, l2;
+ 049E           ;       // 检查仪器校准因数和法性
+ 049E           ; //#ifndef Puncture
+ 049E           ;       if(m == 0)              m = 9;
+ 049E AA20              tst R10
+ 04A0 31F4              brne L71
+ 04A2 BB20              tst R11
+ 04A4 21F4              brne L71
+ 04A6           X25:
+ 04A6 89E0              ldi R24,9
+ 04A8 90E0              ldi R25,0
+ 04AA 5C01              movw R10,R24
+ 04AC 06C0              xjmp L72
+ 04AE           L71:
+ 04AE           ; 	else if(m > 13)	m = 13;
+ 04AE 8DE0              ldi R24,13
+ 04B0 90E0              ldi R25,0
+ 04B2 8A15              cp R24,R10
+ 04B4 9B05              cpc R25,R11
+ 04B6 08F4              brsh L73
+ 04B8           X26:
+ 04B8 5C01              movw R10,R24
+ 04BA           L73:
+ 04BA           L72:
+ 04BA           ; 	if(_DiluentCalChart.calStand[m] < _DILUENT_MIX_BASE_COEFF_DOWN)
+ 04BA 80E0              ldi R24,<__DiluentCalChart+13
+ 04BC 90E0              ldi R25,>__DiluentCalChart+13
+ 04BE F501              movw R30,R10
+ 04C0 EE0F              lsl R30
+ 04C2 FF1F              rol R31
+ 04C4 E80F              add R30,R24
+ 04C6 F91F              adc R31,R25
+ 04C8 8081              ldd R24,z+0
+ 04CA 9181              ldd R25,z+1
+ 04CC 8A30              cpi R24,10
+ 04CE E0E0              ldi R30,0
+ 04D0 9E07              cpc R25,R30
+ 04D2 58F4              brsh L75
+ 04D4           X27:
+ 04D4           ; 		_DiluentCalChart.calStand[m] = _DILUENT_MIX_BASE_COEFF_DOWN;
+ 04D4 80E0              ldi R24,<__DiluentCalChart+13
+ 04D6 90E0              ldi R25,>__DiluentCalChart+13
+ 04D8 F501              movw R30,R10
+ 04DA EE0F              lsl R30
+ 04DC FF1F              rol R31
+ 04DE E80F              add R30,R24
+ 04E0 F91F              adc R31,R25
+ 04E2 8AE0              ldi R24,10
+ 04E4 90E0              ldi R25,0
+ 04E6 9183              std z+1,R25
+ 04E8 8083              std z+0,R24
+ 04EA           L75:
+ 04EA           ; 	if(_DiluentCalChart.calStand[m] > _DILUENT_MIX_BASE_COEFF_UP)
+ 04EA 80E0              ldi R24,<__DiluentCalChart+13
+ 04EC 90E0              ldi R25,>__DiluentCalChart+13
+ 04EE F501              movw R30,R10
+ 04F0 EE0F              lsl R30
+ 04F2 FF1F              rol R31
+ 04F4 E80F              add R30,R24
+ 04F6 F91F              adc R31,R25
+ 04F8 2080              ldd R2,z+0
+ 04FA 3180              ldd R3,z+1
+ 04FC 8AEF              ldi R24,250
+ 04FE 90E0              ldi R25,0
+ 0500 8215              cp R24,R2
+ 0502 9305              cpc R25,R3
+ 0504 58F4              brsh L79
+ 0506           X28:
+ 0506           ; 		_DiluentCalChart.calStand[m] = _DILUENT_MIX_BASE_COEFF_UP;
+ 0506 80E0              ldi R24,<__DiluentCalChart+13
+ 0508 90E0              ldi R25,>__DiluentCalChart+13
+ 050A F501              movw R30,R10
+ 050C EE0F              lsl R30
+ 050E FF1F              rol R31
+ 0510 E80F              add R30,R24
+ 0512 F91F              adc R31,R25
+ 0514 8AEF              ldi R24,250
+ 0516 90E0              ldi R25,0
+ 0518 9183              std z+1,R25
+ 051A 8083              std z+0,R24
+ 051C           L79:
+ 051C           ; 	// 检查稀释液泵校准因数和法性
+ 051C           ; 	if(_DiluentCalChart.calValue < _DILUENT_PUMP_BASE_COEFF_DOWN)
+ 051C 80912B00          lds R24,__DiluentCalChart+11
+ 0520 90912C00          lds R25,__DiluentCalChart+11+1
+ 0524 873C              cpi R24,199
+ 0526 E1E0              ldi R30,1
+ 0528 9E07              cpc R25,R30
+ 052A 30F4              brsh L83
+ 052C           X29:
+ 052C           ; 		_DiluentCalChart.calValue = _DILUENT_PUMP_BASE_COEFF_DOWN;
+ 052C 87EC              ldi R24,455
+ 052E 91E0              ldi R25,1
+ 0530 90932C00          sts __DiluentCalChart+11+1,R25
+ 0534 80932B00          sts __DiluentCalChart+11,R24
+ 0538           L83:
+ 0538           ; 	if(_DiluentCalChart.calValue > _DILUENT_PUMP_BASE_COEFF_UP)
+ 0538 80E2              ldi R24,800
+ 053A 93E0              ldi R25,3
+ 053C 20902B00          lds R2,__DiluentCalChart+11
+ 0540 30902C00          lds R3,__DiluentCalChart+11+1
+ 0544 8215              cp R24,R2
+ 0546 9305              cpc R25,R3
+ 0548 20F4              brsh L87
+ 054A           X30:
+ 054A           ; 		_DiluentCalChart.calValue = _DILUENT_PUMP_BASE_COEFF_UP;
+ 054A 90932C00          sts __DiluentCalChart+11+1,R25
+ 054E 80932B00          sts __DiluentCalChart+11,R24
+ 0552           L87:
+ 0552           ; 	EEPROM_WRITE(EEP_ADD_CAL_DAT, _DiluentCalChart);
+ 0552 89E2              ldi R24,41
+ 0554 90E0              ldi R25,0
+ 0556 9983              std y+1,R25
+ 0558 8883              std y+0,R24
+ 055A 20E0              ldi R18,<__DiluentCalChart
+ 055C 30E0              ldi R19,>__DiluentCalChart
+ 055E 04E6              ldi R16,100
+ 0560 10E0              ldi R17,0
+ 0562 0E940000          xcall _EEPROMWriteBytes_extIO
+ 0566           ;       // 重新计算当前稀释校准因数
+ 0566           ;       l1 = _DiluentCalChart.calValue;
+ 0566 20902B00          lds R2,__DiluentCalChart+11
+ 056A 30902C00          lds R3,__DiluentCalChart+11+1
+ 056E 4424              clr R4
+ 0570 5524              clr R5
+ 0572 2A82              std y+2,R2
+ 0574 3B82              std y+3,R3
+ 0576 4C82              std y+4,R4
+ 0578 5D82              std y+5,R5
+ 057A           ;       l2 = _DiluentCalChart.calStand[m];
+ 057A 80E0              ldi R24,<__DiluentCalChart+13
+ 057C 90E0              ldi R25,>__DiluentCalChart+13
+ 057E F501              movw R30,R10
+ 0580 EE0F              lsl R30
+ 0582 FF1F              rol R31
+ 0584 E80F              add R30,R24
+ 0586 F91F              adc R31,R25
+ 0588 2080              ldd R2,z+0
+ 058A 3180              ldd R3,z+1
+ 058C 4424              clr R4
+ 058E 5524              clr R5
+ 0590 2E82              std y+6,R2
+ 0592 3F82              std y+7,R3
+ 0594 4886              std y+8,R4
+ 0596 5986              std y+9,R5
+ 0598           ;       l1 = (l1*l2)/_DILUENT_MIX_BASE_COEFF;
+ 0598 2E80              ldd R2,y+6
+ 059A 3F80              ldd R3,y+7
+ 059C 4884              ldd R4,y+8
+ 059E 5984              ldd R5,y+9
+ 05A0 0A81              ldd R16,y+2
+ 05A2 1B81              ldd R17,y+3
+ 05A4 2C81              ldd R18,y+4
+ 05A6 3D81              ldd R19,y+5
+ 05A8 5A92              st -y,R5
+ 05AA 4A92              st -y,R4
+ 05AC 3A92              st -y,R3
+ 05AE 2A92              st -y,R2
+ 05B0 0E940000          xcall empy32u
+ 05B4 44E6              ldi R20,100
+ 05B6 50E0              ldi R21,0
+ 05B8 60E0              ldi R22,0
+ 05BA 70E0              ldi R23,0
+ 05BC 7A93              st -y,R23
+ 05BE 6A93              st -y,R22
+ 05C0 5A93              st -y,R21
+ 05C2 4A93              st -y,R20
+ 05C4 0E940000          xcall div32u
+ 05C8 0A83              std y+2,R16
+ 05CA 1B83              std y+3,R17
+ 05CC 2C83              std y+4,R18
+ 05CE 3D83              std y+5,R19
+ 05D0           ;       DiluentCoff[m] = (unsigned int)l1;
+ 05D0 80E0              ldi R24,<_DiluentCoff
+ 05D2 90E0              ldi R25,>_DiluentCoff
+ 05D4 F501              movw R30,R10
+ 05D6 EE0F              lsl R30
+ 05D8 FF1F              rol R31
+ 05DA E80F              add R30,R24
+ 05DC F91F              adc R31,R25
+ 05DE 2A80              ldd R2,y+2
+ 05E0 3B80              ldd R3,y+3
+ 05E2 3182              std z+1,R3
+ 05E4 2082              std z+0,R2
+ 05E6           ;       return DiluentCoff[m];
+ 05E6 F501              movw R30,R10
+ 05E8 EE0F              lsl R30
+ 05EA FF1F              rol R31
+ 05EC E80F              add R30,R24
+ 05EE F91F              adc R31,R25
+ 05F0 0081              ldd R16,z+0
+ 05F2 1181              ldd R17,z+1
+ 05F4           L70:
+ 05F4                   .dbline 0 ; func end
+ 05F4 2A96              adiw R28,10
+ 05F6 0C940000          xjmp pop_xgsetF00C
+ 05FA           ;             p2 -> R12,R13
+ 05FA           ;             p1 -> R10,R11
+ 05FA           ;              n -> R14
+ 05FA           ;             pt -> R18,R19
+ 05FA           ;             ps -> R16,R17
+                        .even
+ 05FA           _MemCopy::
+ 05FA 0E940000          xcall push_xgset00FC
+ 05FE EE80              ldd R14,y+6
+ 0600           ; /*
+ 0600           ; #else
+ 0600           ; {
+ 0600           ;       if(WithoutPuncture != 0)                // 无需穿刺
+ 0600           ;       {
+ 0600           ;               if(m == 0)              m = 9;
+ 0600           ;               else if(m > 13) m = 13;
+ 0600           ;               if(_DiluentCalChart.calStand[m] < _DILUENT_MIX_BASE_COEFF_DOWN)
+ 0600           ;               _DiluentCalChart.calStand[m] = _DILUENT_MIX_BASE_COEFF_DOWN;
+ 0600           ;               if(_DiluentCalChart.calStand[m] > _DILUENT_MIX_BASE_COEFF_UP)
+ 0600           ;               _DiluentCalChart.calStand[m] = _DILUENT_MIX_BASE_COEFF_UP;
+ 0600           ;       // 检查稀释液泵校准因数和法性
+ 0600           ;       if(_DiluentCalChart.calValue < _DILUENT_PUMP_BASE_COEFF_DOWN)
+ 0600           ;               _DiluentCalChart.calValue = _DILUENT_PUMP_BASE_COEFF_DOWN;
+ 0600           ;       if(_DiluentCalChart.calValue > _DILUENT_PUMP_BASE_COEFF_UP)
+ 0600           ;               _DiluentCalChart.calValue = _DILUENT_PUMP_BASE_COEFF_UP;
+ 0600           ;       EEPROM_WRITE(EEP_ADD_CAL_DAT, _DiluentCalChart);
+ 0600           ;       // 重新计算当前稀释校准因数
+ 0600           ;       l1 = _DiluentCalChart.calValue;
+ 0600           ;       uart_Printf("*9922 $%4d\r\n", l1);
+ 0600           ;       l2 = _DiluentCalChart.calStand[m];
+ 0600           ;       l1 = (l1*l2)/_DILUENT_MIX_BASE_COEFF;
+ 0600           ;       DiluentCoff[m] = (unsigned int)l1;
+ 0600           ;       return DiluentCoff[m];
+ 0600           ;       }
+ 0600           ;       else
+ 0600           ;       {
+ 0600           ;               if(_DiluentCalChart.calStand[8] < _DILUENT_MIX_BASE_COEFF_DOWN)
+ 0600           ;               _DiluentCalChart.calStand[8] = _DILUENT_MIX_BASE_COEFF_DOWN;
+ 0600           ;       if(_DiluentCalChart.calStand[8] > _DILUENT_MIX_BASE_COEFF_UP)
+ 0600           ;               _DiluentCalChart.calStand[8] = _DILUENT_MIX_BASE_COEFF_UP;
+ 0600           ;       // 检查稀释液泵校准因数和法性
+ 0600           ;       if(_DiluentCalChart.calValue < _DILUENT_PUMP_BASE_COEFF_DOWN)
+ 0600           ;               _DiluentCalChart.calValue = _DILUENT_PUMP_BASE_COEFF_DOWN;
+ 0600           ;       if(_DiluentCalChart.calValue > _DILUENT_PUMP_BASE_COEFF_UP)
+ 0600           ;               _DiluentCalChart.calValue = _DILUENT_PUMP_BASE_COEFF_UP;
+ 0600           ;       EEPROM_WRITE(EEP_ADD_CAL_DAT, _DiluentCalChart);
+ 0600           ;       // 重新计算当前稀释校准因数
+ 0600           ;       l1 = _DiluentCalChart.calValue;
+ 0600           ;       
+ 0600           ;       l2 = _DiluentCalChart.calStand[8];
+ 0600           ;       
+ 0600           ;       l1 = (l1*l2)/_DILUENT_MIX_BASE_COEFF;
+ 0600           ;       uart_Printf("*9933 $%4d\r\n", l1);
+ 0600           ;       DiluentCoff[8] = (unsigned int)l1;
+ 0600           ;       return DiluentCoff[8];
+ 0600           ;       }
+ 0600           ; }
+ 0600           ; #endif
+ 0600           ; */
+ 0600           ; }
+ 0600           ; /***************************************************************/
+ 0600           ; 
+ 0600           ; void MemCopy(void *ps, void *pt, unsigned char n){
+ 0600           ;       unsigned char *p1, *p2;
+ 0600           ;       p1 = (unsigned char *)ps;
+ 0600 5801              movw R10,R16
+ 0602           ;       p2 = (unsigned char *)pt;
+ 0602 6901              movw R12,R18
+ 0604 07C0              xjmp L95
+ 0606           L94:
+ 0606           ; 	while(n){
+ 0606           ; 		*(p2++) = *(p1++);
+ 0606 F501              movw R30,R10
+ 0608 D601              movw R26,R12
+ 060A 0190              ld R0,Z+
+ 060C 5F01              movw R10,R30
+ 060E 0D92              st X+,R0
+ 0610 6D01              movw R12,R26
+ 0612           ;               n--;
+ 0612 EA94              dec R14
+ 0614           ;               }
+ 0614           L95:
+ 0614 EE20              tst R14
+ 0616 B9F7              brne L94
+ 0618           X31:
+ 0618           L93:
+ 0618                   .dbline 0 ; func end
+ 0618 0C940000          xjmp pop_xgset00FC
+ 061C           ;           str2 -> R18,R19
+ 061C           ;           str1 -> R16,R17
+                        .even
+ 061C           _StringMatching::
+ 061C           ; }
+ 061C           ; 
+ 061C           ; unsigned char StringMatching(_CONST char * str1, char * str2){
+ 061C 13C0              xjmp L99
+ 061E           L98:
+ 061E           ; 	// 字符串匹配
+ 061E           ; 	while(*str1){
+ 061E           ; 		if(*str2 == 0)
+ 061E F901              movw R30,R18
+ 0620 2080              ldd R2,z+0
+ 0622 2220              tst R2
+ 0624 11F4              brne L101
+ 0626           X32:
+ 0626           ; 			return 0;
+ 0626 0027              clr R16
+ 0628 1AC0              xjmp L97
+ 062A           L101:
+ 062A           ; 		if(*str1 == *str2){
+ 062A F901              movw R30,R18
+ 062C 2080              ldd R2,z+0
+ 062E F801              movw R30,R16
+ 0630 3690              elpm R3,Z
+ 0632 3214              cp R3,R2
+ 0634 29F4              brne L103
+ 0636           X33:
+ 0636           ; 			str1 ++;	str2 ++;
+ 0636 0F5F              subi R16,255  ; offset = 1
+ 0638 1F4F              sbci R17,255
+ 063A 2F5F              subi R18,255  ; offset = 1
+ 063C 3F4F              sbci R19,255
+ 063E           ;                       }
+ 063E 02C0              xjmp L104
+ 0640           L103:
+ 0640           ; 		else
+ 0640           ; 			return 0;
+ 0640 0027              clr R16
+ 0642 0DC0              xjmp L97
+ 0644           L104:
+ 0644           ; 		}
+ 0644           L99:
+ 0644 F801              movw R30,R16
+ 0646 2690              elpm R2,Z
+ 0648 2220              tst R2
+ 064A 49F7              brne L98
+ 064C           X34:
+ 064C           ; 	if(*str1 == *str2)
+ 064C F901              movw R30,R18
+ 064E 2080              ldd R2,z+0
+ 0650 F801              movw R30,R16
+ 0652 3690              elpm R3,Z
+ 0654 3214              cp R3,R2
+ 0656 11F4              brne L105
+ 0658           X35:
+ 0658           ; 		return 1;
+ 0658 01E0              ldi R16,1
+ 065A 01C0              xjmp L97
+ 065C           L105:
+ 065C           ; 	else
+ 065C           ; 		return 0;
+ 065C 0027              clr R16
+ 065E           L97:
+ 065E                   .dbline 0 ; func end
+ 065E 0895              ret
+ 0660           ;              i -> <dead>
+ 0660           ;            neg -> R20
+ 0660           ;              n -> R10,R11
+ 0660           ;           pStr -> R22,R23
+                        .even
+ 0660           _StringToInt::
+ 0660 0E940000          xcall push_xgsetF00C
+ 0664 B801              movw R22,R16
+ 0666           ; }
+ 0666           ; 
+ 0666           ; unsigned int  StringToInt(const char * pStr){
+ 0666           ;       // 字符串转数值
+ 0666           ;       unsigned char i, neg=0;
+ 0666 4427              clr R20
+ 0668           ;       int n;
+ 0668           ;       if(*pStr=='-'){
+ 0668 FB01              movw R30,R22
+ 066A 8081              ldd R24,z+0
+ 066C 8D32              cpi R24,45
+ 066E 19F4              brne L108
+ 0670           X36:
+ 0670           ; 		pStr ++;
+ 0670 6F5F              subi R22,255  ; offset = 1
+ 0672 7F4F              sbci R23,255
+ 0674           ;               neg = 1;
+ 0674 41E0              ldi R20,1
+ 0676           ;               }
+ 0676           L108:
+ 0676           ; 	n = 0;
+ 0676 AA24              clr R10
+ 0678 BB24              clr R11
+ 067A 17C0              xjmp L111
+ 067C           L110:
+ 067C           ; 	while(*pStr){
+ 067C           ; 		if(*pStr>='0' && *pStr<='9'){
+ 067C FB01              movw R30,R22
+ 067E 2080              ldd R2,z+0
+ 0680 3324              clr R3
+ 0682 822D              mov R24,R2
+ 0684 8033              cpi R24,48
+ 0686 78F0              brlo L113
+ 0688           X37:
+ 0688 89E3              ldi R24,57
+ 068A 8215              cp R24,R2
+ 068C 60F0              brlo L113
+ 068E           X38:
+ 068E           ; 			n = n*10;
+ 068E 0AE0              ldi R16,10
+ 0690 10E0              ldi R17,0
+ 0692 9501              movw R18,R10
+ 0694 0E940000          xcall empy16s
+ 0698 5801              movw R10,R16
+ 069A           ;                       n += (*pStr-0x30);
+ 069A FB01              movw R30,R22
+ 069C 8081              ldd R24,z+0
+ 069E 9927              clr R25
+ 06A0 C097              sbiw R24,48
+ 06A2 A80E              add R10,R24
+ 06A4 B91E              adc R11,R25
+ 06A6           ;                       }
+ 06A6           L113:
+ 06A6           ; 		pStr ++;
+ 06A6 6F5F              subi R22,255  ; offset = 1
+ 06A8 7F4F              sbci R23,255
+ 06AA           ;               }
+ 06AA           L111:
+ 06AA FB01              movw R30,R22
+ 06AC 2080              ldd R2,z+0
+ 06AE 2220              tst R2
+ 06B0 29F7              brne L110
+ 06B2           X39:
+ 06B2           ; 	if(neg)
+ 06B2 4423              tst R20
+ 06B4 29F0              breq L115
+ 06B6           X40:
+ 06B6           ; 		n = 0-n;
+ 06B6 2224              clr R2
+ 06B8 3324              clr R3
+ 06BA 2A18              sub R2,R10
+ 06BC 3B08              sbc R3,R11
+ 06BE 5101              movw R10,R2
+ 06C0           L115:
+ 06C0           ; 	return n;
+ 06C0 8501              movw R16,R10
+ 06C2           L107:
+ 06C2                   .dbline 0 ; func end
+ 06C2 0C940000          xjmp pop_xgsetF00C
+ 06C6           ;              i -> <dead>
+ 06C6           ;              n -> R10,R11
+ 06C6           ;           pStr -> R20,R21
+                        .even
+ 06C6           _StringToInt2::
+ 06C6 0E940000          xcall push_xgset300C
+ 06CA A801              movw R20,R16
+ 06CC           ; }
+ 06CC           ; 
+ 06CC           ; unsigned int  StringToInt2(const char * pStr){
+ 06CC           ;       // 字符串转数值
+ 06CC           ;       unsigned char i;
+ 06CC           ;       unsigned int n = 0;
+ 06CC AA24              clr R10
+ 06CE BB24              clr R11
+ 06D0 17C0              xjmp L119
+ 06D2           L118:
+ 06D2           ; 	while(*pStr != '$'){
+ 06D2           ; 		if(*pStr>='0' && *pStr<='9'){
+ 06D2 FA01              movw R30,R20
+ 06D4 2080              ldd R2,z+0
+ 06D6 3324              clr R3
+ 06D8 822D              mov R24,R2
+ 06DA 8033              cpi R24,48
+ 06DC 78F0              brlo L121
+ 06DE           X41:
+ 06DE 89E3              ldi R24,57
+ 06E0 8215              cp R24,R2
+ 06E2 60F0              brlo L121
+ 06E4           X42:
+ 06E4           ; 			n = n*10;
+ 06E4 0AE0              ldi R16,10
+ 06E6 10E0              ldi R17,0
+ 06E8 9501              movw R18,R10
+ 06EA 0E940000          xcall empy16s
+ 06EE 5801              movw R10,R16
+ 06F0           ;                       n += (*pStr-0x30);
+ 06F0 FA01              movw R30,R20
+ 06F2 8081              ldd R24,z+0
+ 06F4 9927              clr R25
+ 06F6 C097              sbiw R24,48
+ 06F8 A80E              add R10,R24
+ 06FA B91E              adc R11,R25
+ 06FC           ;                       }
+ 06FC           L121:
+ 06FC           ; 		pStr ++;
+ 06FC 4F5F              subi R20,255  ; offset = 1
+ 06FE 5F4F              sbci R21,255
+ 0700           ;               }
+ 0700           L119:
+ 0700 FA01              movw R30,R20
+ 0702 8081              ldd R24,z+0
+ 0704 8432              cpi R24,36
+ 0706 29F7              brne L118
+ 0708           X43:
+ 0708           ; 	return n;
+ 0708 8501              movw R16,R10
+ 070A           L117:
+ 070A                   .dbline 0 ; func end
+ 070A 0C940000          xjmp pop_xgset300C
+ 070E           ;              i -> R10,R11
+ 070E           ;              b -> R18,R19
+ 070E           ;              a -> R16,R17
+                        .even
+ 070E           _AbsDifference::
+ 070E AA92              st -y,R10
+ 0710 BA92              st -y,R11
+ 0712           ; }
+ 0712           ; 
+ 0712           ; unsigned int AbsDifference(unsigned int a, unsigned int b){
+ 0712           ;       unsigned int i;
+ 0712           ;       if(a>b)
+ 0712 2017              cp R18,R16
+ 0714 3107              cpc R19,R17
+ 0716 20F4              brsh L124
+ 0718           X44:
+ 0718           ; 		i = a-b;
+ 0718 5801              movw R10,R16
+ 071A A21A              sub R10,R18
+ 071C B30A              sbc R11,R19
+ 071E 03C0              xjmp L125
+ 0720           L124:
+ 0720           ; 	else
+ 0720           ; 		i = b-a;
+ 0720 5901              movw R10,R18
+ 0722 A01A              sub R10,R16
+ 0724 B10A              sbc R11,R17
+ 0726           L125:
+ 0726           ; 	return i;
+ 0726 8501              movw R16,R10
+ 0728           L123:
+ 0728                   .dbline 0 ; func end
+ 0728 B990              ld R11,y+
+ 072A A990              ld R10,y+
+ 072C 0895              ret
+                        .area bss(ram, con, rel)
+ 0000           __FlowNum1::
+ 0000                   .blkb 2
+ 0002           __FlowNum0::
+ 0002                   .blkb 2
+ 0004           _DiluentCoff::
+ 0004                   .blkb 28
+ 0020           __DiluentCalChart::
+ 0020                   .blkb 41
+                        .area data(ram, con, rel)
+ 0000           L69:
+ 0000                   .blkb 15
+                        .area idata
+ 0000 2F2F5B25645D2024202534640D0A00    .byte 47,47,91,37,'d,93,32,36,32,37,52,'d,13,10,0
+                        .area data(ram, con, rel)
+ 000F           L63:
+ 000F                   .blkb 22
+                        .area idata
+ 000F 2F2F44696C75656E74436F6666202420  .byte 47,47,'D,'i,'l,'u,'e,'n,'t,'C,'o,'f,'f,32,36,32
+ 001F 2534640D0A00      .byte 37,52,'d,13,10,0
+                        .area data(ram, con, rel)
+ 0025           L37:
+ 0025                   .blkb 28
+                        .area idata
+ 0025 2F2F2043757243616C69623A5B63616C  .byte 47,47,32,'C,'u,'r,'C,'a,'l,'i,'b,58,91,'c,'a,'l
+ 0035 5D2564205B6E5D25640D0A00  .byte 93,37,'d,32,91,'n,93,37,'d,13,10,0
+                        .area data(ram, con, rel)
+                ; }
+                ; 
