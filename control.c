@@ -352,6 +352,11 @@ void UpLoadingAllSensorState(void){
 	uart_Printf("\r\n");	// 发送结束
 }
 
+
+
+//git test comment for branch "old"
+
+
 // 从机事件处理和分配
 void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 	// 事件分配处理
