@@ -354,10 +354,6 @@ void UpLoadingAllSensorState(void){
 }
 
 
-//git test comment for branch "old"
-//git test comment for command "git status" and "git diff"
-//git test comment for command "git diff --staged"
-
 // 从机事件处理和分配
 void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 	// 事件分配处理
