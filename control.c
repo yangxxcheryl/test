@@ -212,15 +212,8 @@ void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
 			break;
 		}
 }
-/*
-unsigned char GetTurnPlateMonitorState(void)
-{	
-	Uart0ReUnable;
-	uart_Printf("%s $%4d\r\n",strM3175,MotModulePhoSta[MOT_TURN_PLATE][1]);
-	Uart0ReEnable;
-	return MotModulePhoSta[MOT_TURN_PLATE][1];
-}
-*/
+
+//delet one block commet here 2017/08/23
 
 signed char GetMotorMonitorState(unsigned char slave,unsigned char num)
 {
@@ -463,7 +456,7 @@ void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 
 /*********************************************************************************************/
 
-
+//add a comment here for CSDN CODE tool "compare" test 170823
 
 /****************************************************************************************************/
 // 机械运行初始化
@@ -718,6 +711,7 @@ unsigned char MachinePositionInit(void){
 	return 0;
 }
 */
+
 
 unsigned char MachinePositionInit(void){
 	// 机械位置初始化
