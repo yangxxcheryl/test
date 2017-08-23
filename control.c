@@ -456,7 +456,7 @@ void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 
 /*********************************************************************************************/
 
-//add a comment here for CSDN CODE tool "compare" test 170823
+//add a comment here for new branch test 170823
 
 /****************************************************************************************************/
 // 机械运行初始化
@@ -1135,6 +1135,8 @@ void Beep(void){
 			break;
 		}
 }
+
+//test comment for new branch 170823
 
 // 设置状态指示灯
 void SetStateLedBusy(void)
