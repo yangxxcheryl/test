@@ -1,4 +1,4 @@
-//comment for branch "new"
+//test on my personal laptops
 
 #include <iom1280v.h>
 #include "B1404_LIB.h"
@@ -23,7 +23,7 @@ unsigned char (*EvenPosChangeProcess)(INFO_EVENT * pInfoEvent);
 unsigned char (*EvenLiquidProcess)(INFO_EVENT * pInfoEvent);
 unsigned char (*EvenCardStoreProcess)(INFO_EVENT * pInfoEvent);
 
-MOTOR_POSITION MotorPosition[SLAVE_NUM];
+MOTOR_POSITIONs MotorPosition[SLAVE_NUM];
 unsigned char MotModulePhoSta[SLAVE_NUM][2];	// 电机模块光藕状态信息
 unsigned char LiquidState[4][2];	// 液路状态和参数
 unsigned char StoreHumi;			// 片仓湿度
@@ -212,15 +212,8 @@ void UpLoadingModuleSensorState(unsigned char slaveNum, unsigned char num){
 			break;
 		}
 }
-/*
-unsigned char GetTurnPlateMonitorState(void)
-{	
-	Uart0ReUnable;
-	uart_Printf("%s $%4d\r\n",strM3175,MotModulePhoSta[MOT_TURN_PLATE][1]);
-	Uart0ReEnable;
-	return MotModulePhoSta[MOT_TURN_PLATE][1];
-}
-*/
+
+//delet one block commet here 2017/08/23
 
 signed char GetMotorMonitorState(unsigned char slave,unsigned char num)
 {
@@ -463,7 +456,7 @@ void SlaveEventAssignProcess(INFO_EVENT * pInfoEvent){
 
 /*********************************************************************************************/
 
-
+//add a comment here for new branch test 170823
 
 /****************************************************************************************************/
 // 机械运行初始化
@@ -718,6 +711,7 @@ unsigned char MachinePositionInit(void){
 	return 0;
 }
 */
+
 
 unsigned char MachinePositionInit(void){
 	// 机械位置初始化
@@ -1141,6 +1135,8 @@ void Beep(void){
 			break;
 		}
 }
+
+//test comment for new branch 170823
 
 // 设置状态指示灯
 void SetStateLedBusy(void)
