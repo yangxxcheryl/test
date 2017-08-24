@@ -1,4 +1,4 @@
-//comment for branch "new"
+//test on my personal laptops
 
 #include <iom1280v.h>
 #include "B1404_LIB.h"
@@ -23,7 +23,7 @@ unsigned char (*EvenPosChangeProcess)(INFO_EVENT * pInfoEvent);
 unsigned char (*EvenLiquidProcess)(INFO_EVENT * pInfoEvent);
 unsigned char (*EvenCardStoreProcess)(INFO_EVENT * pInfoEvent);
 
-MOTOR_POSITION MotorPosition[SLAVE_NUM];
+MOTOR_POSITIONs MotorPosition[SLAVE_NUM];
 unsigned char MotModulePhoSta[SLAVE_NUM][2];	// 电机模块光藕状态信息
 unsigned char LiquidState[4][2];	// 液路状态和参数
 unsigned char StoreHumi;			// 片仓湿度
